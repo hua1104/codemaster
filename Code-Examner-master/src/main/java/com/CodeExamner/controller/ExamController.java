@@ -2,8 +2,11 @@
 package com.CodeExamner.controller;
 
 import com.CodeExamner.dto.request.ExamCreateRequest;
+import com.CodeExamner.dto.response.ExamProblemDetailResponse;
 import com.CodeExamner.dto.response.ExamResponse;
 import com.CodeExamner.entity.Exam;
+import com.CodeExamner.entity.ExamProblem;
+import com.CodeExamner.repository.ExamProblemRepository;
 import com.CodeExamner.service.ExamService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +28,9 @@ public class ExamController {
 
     @Autowired
     private ExamService examService;
+
+    @Autowired
+    private ExamProblemRepository examProblemRepository;
 
     @PostMapping
     @PreAuthorize("hasRole('TEACHER') or hasRole('ADMIN')")
@@ -126,9 +132,33 @@ public class ExamController {
     @GetMapping("/{id}/can-take")
     @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<Boolean> canTakeExam(@PathVariable Long id) {
-        // 这里需要获取当前学生ID，简化处理
-        boolean canTake = examService.canStudentTakeExam(id, 1L); // 需要从安全上下文获取真实ID
+        // TODO: 从安全上下文中获取真实学生 ID
+        boolean canTake = examService.canStudentTakeExam(id, 1L);
         return ResponseEntity.ok(canTake);
+    }
+
+    @GetMapping("/{id}/problems")
+    @PreAuthorize("hasRole('STUDENT') or hasRole('TEACHER') or hasRole('ADMIN')")
+    public ResponseEntity<List<ExamProblemDetailResponse>> getExamProblems(@PathVariable Long id) {
+        // 确认考试存在且当前用户有权查看
+        examService.getExamById(id);
+
+        List<ExamProblem> examProblems = examProblemRepository.findByExamId(id);
+        List<ExamProblemDetailResponse> responses = examProblems.stream().map(ep -> {
+            ExamProblemDetailResponse resp = new ExamProblemDetailResponse();
+            if (ep.getProblem() != null) {
+                resp.setProblemId(ep.getProblem().getId());
+                resp.setTitle(ep.getProblem().getTitle());
+                resp.setDescription(ep.getProblem().getDescription());
+                resp.setType(ep.getProblem().getType());
+                resp.setOptions(ep.getProblem().getOptions());
+            }
+            resp.setScore(ep.getScore());
+            resp.setSequence(ep.getSequence());
+            return resp;
+        }).toList();
+
+        return ResponseEntity.ok(responses);
     }
 
     private ExamResponse convertToResponse(Exam exam) {
@@ -136,15 +166,16 @@ public class ExamController {
         response.setId(exam.getId());
         response.setTitle(exam.getTitle());
         response.setDescription(exam.getDescription());
-        response.setCreatorName(exam.getCreatedBy().getUsername());
+        if (exam.getCreatedBy() != null) {
+            response.setCreatorName(exam.getCreatedBy().getUsername());
+        }
         response.setStartTime(exam.getStartTime());
         response.setEndTime(exam.getEndTime());
         response.setStatus(exam.getStatus());
         response.setDuration(exam.getDuration());
-        response.setProblemCount(exam.getProblems().size());
+        response.setProblemCount(exam.getProblems() != null ? exam.getProblems().size() : 0);
 
-        // 计算剩余时间（如果是进行中的考试）
-        if (exam.getStatus().name().equals("ONGOING")) {
+        if (exam.getStatus() != null && exam.getStatus().name().equals("ONGOING")) {
             LocalDateTime now = LocalDateTime.now();
             long remainingMinutes = java.time.Duration.between(now, exam.getEndTime()).toMinutes();
             response.setRemainingTime(Math.max(0, remainingMinutes));

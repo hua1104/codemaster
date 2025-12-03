@@ -33,5 +33,7 @@ public interface ExamRepository extends JpaRepository<Exam, Long> {
 
     // 新增：按状态列表查询（分页版本）
     Page<Exam> findByStatusIn(List<ExamStatus> statuses, Pageable pageable);
-    Long countByStatus(String status);
+
+    // 统计不同状态的考试数量
+    Long countByStatus(ExamStatus status);
 }

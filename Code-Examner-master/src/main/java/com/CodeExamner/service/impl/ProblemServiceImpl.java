@@ -5,6 +5,7 @@ import com.CodeExamner.entity.Problem;
 import com.CodeExamner.entity.TestCase;
 import com.CodeExamner.entity.User;
 import com.CodeExamner.entity.enums.Difficulty;
+import com.CodeExamner.entity.enums.UserRole;
 import com.CodeExamner.repository.ProblemRepository;
 import com.CodeExamner.repository.TestCaseRepository;
 import com.CodeExamner.service.ProblemService;
@@ -69,7 +70,8 @@ public class ProblemServiceImpl implements ProblemService {
         // 检查访问权限
         User currentUser = userService.getCurrentUser();
         if (!problem.getIsPublic() &&
-                !problem.getCreatedBy().getId().equals(currentUser.getId())) {
+                !problem.getCreatedBy().getId().equals(currentUser.getId()) &&
+                currentUser.getRole() != UserRole.ADMIN) {
             throw new RuntimeException("无权访问此题目");
         }
 
@@ -84,6 +86,11 @@ public class ProblemServiceImpl implements ProblemService {
     @Override
     public Page<Problem> getAccessibleProblems(Pageable pageable) {
         User currentUser = userService.getCurrentUser();
+        // 管理员可以查看所有题目，实现题库共享
+        if (currentUser.getRole() == UserRole.ADMIN) {
+            return problemRepository.findAll(pageable);
+        }
+        // 其他用户：公开题目 + 自己创建的题目
         return problemRepository.findAccessibleProblems(currentUser.getId(), pageable);
     }
 
@@ -121,14 +128,17 @@ public class ProblemServiceImpl implements ProblemService {
     @Override
     public Page<Problem> searchProblems(String keyword, Difficulty difficulty, Pageable pageable) {
         User currentUser = userService.getCurrentUser();
+        final boolean isAdmin = currentUser.getRole() == UserRole.ADMIN;
 
         Specification<Problem> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
-            // 只能访问公开题目或自己创建的题目
-            Predicate isPublic = cb.isTrue(root.get("isPublic"));
-            Predicate isOwner = cb.equal(root.get("createdBy").get("id"), currentUser.getId());
-            predicates.add(cb.or(isPublic, isOwner));
+            // 非管理员：只能访问公开题目或自己创建的题目
+            if (!isAdmin) {
+                Predicate isPublic = cb.isTrue(root.get("isPublic"));
+                Predicate isOwner = cb.equal(root.get("createdBy").get("id"), currentUser.getId());
+                predicates.add(cb.or(isPublic, isOwner));
+            }
 
             if (keyword != null && !keyword.trim().isEmpty()) {
                 Predicate titleLike = cb.like(root.get("title"), "%" + keyword + "%");
@@ -148,6 +158,10 @@ public class ProblemServiceImpl implements ProblemService {
 
     private void checkProblemOwnership(Problem problem) {
         User currentUser = userService.getCurrentUser();
+        // 管理员可以管理所有题目
+        if (currentUser.getRole() == UserRole.ADMIN) {
+            return;
+        }
         if (!problem.getCreatedBy().getId().equals(currentUser.getId())) {
             throw new RuntimeException("无权操作此题目");
         }

@@ -7,6 +7,7 @@ import com.CodeExamner.entity.enums.JudgeStatus;
 import com.CodeExamner.repository.SubmissionRepository;
 import com.CodeExamner.repository.ProblemRepository;
 import com.CodeExamner.repository.ExamRepository;
+import com.CodeExamner.service.JudgeService;
 import com.CodeExamner.service.SubmissionService;
 import com.CodeExamner.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +32,9 @@ public class SubmissionServiceImpl implements SubmissionService {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private JudgeService judgeService;
 
     @Override
     public Submission submitCode(Submission submission) {
@@ -61,7 +65,12 @@ public class SubmissionServiceImpl implements SubmissionService {
             submission.setExam(exam);
         }
 
-        return submissionRepository.save(submission);
+        Submission saved = submissionRepository.save(submission);
+
+        // 异步评测并计算得分（包括考试中的作答）
+        judgeService.judgeSubmission(saved);
+
+        return saved;
     }
 
     @Override

@@ -55,7 +55,8 @@ public class SecurityConfig {
                         .requestMatchers("/problems/{id}").authenticated()
                         .requestMatchers("/problems/**").hasAnyRole("TEACHER", "ADMIN")
                         .requestMatchers("/exams/available", "/exams/ongoing").authenticated()
-                        .requestMatchers("/exams/**").hasAnyRole("TEACHER", "ADMIN")
+                        // 其他考试相关接口统一要求登录，具体角色在方法上用 @PreAuthorize 控制
+                        .requestMatchers("/exams/**").authenticated()
                         .requestMatchers("/submissions/**").authenticated()
                         .anyRequest().authenticated()
                 );

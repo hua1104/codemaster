@@ -2,6 +2,7 @@
 package com.CodeExamner.entity;
 
 import com.CodeExamner.entity.enums.Difficulty;
+import com.CodeExamner.entity.enums.ProblemType;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.time.LocalDateTime;
@@ -24,6 +25,15 @@ public class Problem {
 
     @Column(columnDefinition = "TEXT")
     private String templateCode; // 代码模板
+
+    @Enumerated(EnumType.STRING)
+    private ProblemType type = ProblemType.CODING; // 题目类型：编程 / 选择 / 填空
+
+    @Column(columnDefinition = "TEXT")
+    private String options; // 选择题选项（JSON 格式存储）
+
+    @Column(columnDefinition = "TEXT")
+    private String answer; // 标准答案（JSON 或文本存储）
 
     @Enumerated(EnumType.STRING)
     private Difficulty difficulty;

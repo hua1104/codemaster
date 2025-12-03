@@ -10,7 +10,7 @@
       <div class="filter-area">
         <el-input
           v-model="searchQuery"
-          placeholder="搜索考试或题目名称"
+          placeholder="搜索题目名称或提交ID"
           clearable
           style="width: 250px; margin-right: 15px;"
           @change="fetchSubmissions"
@@ -19,7 +19,7 @@
             <el-icon><Search /></el-icon>
           </template>
         </el-input>
-        
+
         <el-select
           v-model="filter.result"
           placeholder="筛选提交结果"
@@ -29,7 +29,7 @@
         >
           <el-option label="通过 (AC)" value="ACCEPTED" />
           <el-option label="错误 (WA)" value="WRONG_ANSWER" />
-          <el-option label="待评分" value="PENDING" />
+          <el-option label="待评测" value="PENDING" />
           <el-option label="编译失败" value="COMPILE_ERROR" />
         </el-select>
 
@@ -38,34 +38,38 @@
         </el-button>
       </div>
 
-      <el-table 
-        :data="submissionList" 
-        v-loading="loading" 
+      <el-table
+        :data="submissionList"
+        v-loading="loading"
         :style="{ width: '100%', marginTop: '20px' }"
         border
       >
         <el-table-column prop="id" label="ID" width="80" />
-        
+
         <el-table-column prop="problemTitle" label="题目名称" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="examName" label="所属考试" min-width="180" show-overflow-tooltip />
-        
-        <el-table-column label="结果" width="120">
+
+        <el-table-column label="结果" width="140">
           <template #default="scope">
-            <el-tag :type="getResultType(scope.row.result)" effect="dark" size="small">
-              {{ formatResult(scope.row.result) }}
+            <el-tag :type="getResultType(scope.row.status)" effect="dark" size="small">
+              {{ formatResult(scope.row.status) }}
             </el-tag>
           </template>
         </el-table-column>
-        
+
         <el-table-column prop="score" label="得分" width="100">
           <template #default="scope">
-            <span v-if="scope.row.result === 'ACCEPTED'">100</span>
-            <span v-else-if="scope.row.score !== undefined">{{ scope.row.score }}</span>
+            <span v-if="scope.row.score !== null && scope.row.score !== undefined">
+              {{ scope.row.score }}
+            </span>
             <span v-else>-</span>
           </template>
         </el-table-column>
-        
-        <el-table-column prop="submitTime" label="提交时间" width="180" />
+
+        <el-table-column prop="submitTime" label="提交时间" width="180">
+          <template #default="scope">
+            {{ formatDateTime(scope.row.submitTime) }}
+          </template>
+        </el-table-column>
 
         <el-table-column label="操作" width="100" fixed="right">
           <template #default="scope">
@@ -88,134 +92,243 @@
           background
         />
       </div>
+      <el-dialog
+        v-model="detailDialogVisible"
+        title="提交详情"
+        width="800px"
+      >
+        <div v-loading="detailLoading" style="min-height: 200px;">
+          <div v-if="detailData">
+            <h3 style="margin-bottom: 10px;">
+              {{ detailData.problemTitle }}
+            </h3>
+            <p v-if="detailData.creatorName" style="color: var(--el-text-color-secondary); margin-bottom: 10px;">
+              出题人：{{ detailData.creatorName }}
+            </p>
+            <p style="margin-bottom: 10px;">
+              难度：{{ detailData.difficulty || '未知' }}，
+              时间限制：{{ detailData.timeLimit != null ? detailData.timeLimit + ' ms' : '未设置' }}，
+              内存限制：{{ detailData.memoryLimit != null ? detailData.memoryLimit + ' MB' : '未设置' }}
+            </p>
+            <div
+              v-if="detailData.problemDescription"
+              class="problem-description"
+              v-html="detailData.problemDescription"
+              style="margin-bottom: 15px; padding: 10px; background: #fafafa; border-radius: 4px;"
+            />
+
+            <el-divider />
+
+            <p style="margin-bottom: 6px;">
+              提交结果：
+              <el-tag :type="getResultType(detailData.status)" effect="dark" size="small">
+                {{ formatResult(detailData.status) }}
+              </el-tag>
+              <span style="margin-left: 12px;">
+                得分：{{ detailData.score != null ? detailData.score : '-' }}
+              </span>
+            </p>
+            <p style="margin-bottom: 6px;">
+              提交时间：{{ formatDateTime(detailData.submitTime) }}
+            </p>
+            <p style="margin-bottom: 10px;">
+              评测耗时：{{ detailData.timeUsed != null ? detailData.timeUsed + ' ms' : '未知' }}，
+              内存：{{ detailData.memoryUsed != null ? detailData.memoryUsed + ' KB' : '未知' }}
+            </p>
+
+            <el-input
+              v-model="detailData.code"
+              type="textarea"
+              :rows="12"
+              readonly
+              placeholder="本次提交的代码内容"
+            />
+          </div>
+          <div v-else-if="!detailLoading">
+            暂无详情数据
+          </div>
+        </div>
+      </el-dialog>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
-import { Search, Refresh } from '@element-plus/icons-vue';
+import { ref, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
+import { Search, Refresh } from '@element-plus/icons-vue'
+import apiClient from '@/services/apiClient'
 
-const router = useRouter();
-
-// --- 类型定义 ---
-interface Submission {
-  id: number;
-  problemTitle: string;
-  examName: string;
-  result: 'ACCEPTED' | 'WRONG_ANSWER' | 'PENDING' | 'COMPILE_ERROR';
-  score?: number; 
-  submitTime: string;
+interface SubmissionRow {
+  id: number
+  problemId: number
+  problemTitle: string
+  status: string
+  score: number | null
+  submitTime: string
 }
 
-// --- 状态管理 ---
-const loading = ref(false);
-const searchQuery = ref('');
-const submissionList = ref<Submission[]>([]);
+const loading = ref(false)
+const searchQuery = ref('')
+const submissionList = ref<SubmissionRow[]>([])
 const filter = ref({
-  result: '',
-});
+  result: ''
+})
 const pagination = ref({
   page: 1,
   limit: 10,
-  total: 0,
-});
+  total: 0
+})
 
-// --- 模拟数据 ---
-const mockData: Submission[] = [
-    { id: 5001, problemTitle: '实现二分查找', examName: 'Java算法设计', result: 'ACCEPTED', score: 100, submitTime: '2025-11-20 10:30:00' },
-    { id: 5002, problemTitle: '数据库事务隔离级别', examName: '数据库系统基础', result: 'WRONG_ANSWER', score: 75, submitTime: '2025-11-18 14:05:00' },
-    { id: 5003, problemTitle: 'Vue组件生命周期', examName: 'Web开发期中测试', result: 'PENDING', submitTime: '2025-11-15 09:55:00' },
-    { id: 5004, problemTitle: '内存管理机制', examName: '操作系统原理', result: 'COMPILE_ERROR', score: 0, submitTime: '2025-11-10 11:20:00' },
-];
-for (let i = 5; i <= 35; i++) {
-    mockData.push({
-        id: 5000 + i,
-        problemTitle: `编程题 ${i} - 字符串操作`,
-        examName: `模拟考试 ${i % 3 + 1}`,
-        result: i % 4 === 0 ? 'ACCEPTED' : (i % 4 === 1 ? 'WRONG_ANSWER' : (i % 4 === 2 ? 'PENDING' : 'COMPILE_ERROR')),
-        score: i % 4 === 0 ? 100 : (i % 4 === 1 ? Math.floor(Math.random() * 50) + 50 : undefined),
-        submitTime: `2025-11-${i % 25 + 1} 10:00:00`,
-    });
+const detailDialogVisible = ref(false)
+const detailLoading = ref(false)
+const detailData = ref<any | null>(null)
+
+const formatDateTime = (value: string | null | undefined) => {
+  if (!value) return ''
+  try {
+    const d = new Date(value)
+    return d.toLocaleString()
+  } catch {
+    return value
+  }
 }
 
-
-// --- 数据获取（Mock实现） ---
 const fetchSubmissions = async () => {
-  loading.value = true;
-  await new Promise(resolve => setTimeout(resolve, 500)); 
-  
-  let filteredData = mockData.filter(sub => {
-    const searchMatch = sub.problemTitle.includes(searchQuery.value) || 
-                        sub.examName.includes(searchQuery.value) ||
-                        sub.id.toString().includes(searchQuery.value);
-    const resultMatch = !filter.value.result || sub.result === filter.value.result;
-    return searchMatch && resultMatch;
-  });
-  
-  pagination.value.total = filteredData.length;
-  const start = (pagination.value.page - 1) * pagination.value.limit;
-  const end = start + pagination.value.limit;
-  
-  submissionList.value = filteredData.slice(start, end);
-  loading.value = false;
-};
+  loading.value = true
+  try {
+    const { data: pageData } = await apiClient.get('/submissions/my', {
+      params: {
+        page: pagination.value.page - 1,
+        size: pagination.value.limit
+      }
+    })
 
-// --- 分页事件处理 ---
+    const items = (pageData.content ?? []) as any[]
+    let rows: SubmissionRow[] = items.map((s) => ({
+      id: s.id,
+      problemId: s.problemId,
+      problemTitle: s.problemTitle,
+      status: s.status,
+      score: s.score ?? null,
+      submitTime: s.submitTime
+    }))
+
+    if (searchQuery.value) {
+      const keyword = searchQuery.value.trim()
+      rows = rows.filter(
+        (r) =>
+          r.problemTitle.includes(keyword) ||
+          r.id.toString().includes(keyword)
+      )
+    }
+
+    if (filter.value.result) {
+      rows = rows.filter((r) => r.status === filter.value.result)
+    }
+
+    submissionList.value = rows
+    pagination.value.total = pageData.totalElements ?? rows.length
+  } catch (error) {
+    console.error('Fetch Submissions Error:', error)
+    ElMessage.error('加载提交记录失败，请稍后重试')
+  } finally {
+    loading.value = false
+  }
+}
+
 const handleSizeChange = (val: number) => {
-  pagination.value.limit = val;
-  pagination.value.page = 1;
-  fetchSubmissions();
-};
+  pagination.value.limit = val
+  pagination.value.page = 1
+  fetchSubmissions()
+}
 
 const handleCurrentChange = (val: number) => {
-  pagination.value.page = val;
-  fetchSubmissions();
-};
-
-// --- 操作方法 ---
-const handleViewDetail = (id: number) => {
-    // 实际项目中：跳转到提交详情页，展示代码、测试用例结果等
-    ElMessage.info(`跳转到提交记录 ID: ${id} 的详情页`);
-    // router.push({ name: 'SubmissionDetail', params: { id: id.toString() } });
-};
-
-
-// --- 辅助函数：格式化显示 ---
-
-const formatResult = (result: Submission['result']) => {
-    const map = {
-        'ACCEPTED': '通过 (AC)',
-        'WRONG_ANSWER': '错误 (WA)',
-        'PENDING': '待评分',
-        'COMPILE_ERROR': '编译失败',
-    };
-    return map[result] || '未知';
-}
-const getResultType = (result: Submission['result']) => {
-    const map = {
-        'ACCEPTED': 'success',
-        'WRONG_ANSWER': 'danger',
-        'PENDING': 'warning',
-        'COMPILE_ERROR': 'info',
-    };
-    // 确保返回的类型在 ElTag 支持的范围内
-    return (map[result] as 'success' | 'danger' | 'warning' | 'info' | undefined) || 'info'; 
+  pagination.value.page = val
+  fetchSubmissions()
 }
 
+const handleViewDetail = async (id: number) => {
+  detailDialogVisible.value = true
+  detailLoading.value = true
+  detailData.value = null
+
+  try {
+    const { data: submission } = await apiClient.get(`/submissions/${id}`)
+
+    let problemDetail: any = null
+    try {
+      const { data } = await apiClient.get(`/problems/${submission.problemId}`)
+      problemDetail = data
+    } catch {
+      problemDetail = null
+    }
+
+    detailData.value = {
+      id: submission.id,
+      problemId: submission.problemId,
+      problemTitle: submission.problemTitle,
+      status: submission.status,
+      score: submission.score,
+      timeUsed: submission.timeUsed,
+      memoryUsed: submission.memoryUsed,
+      submitTime: submission.submitTime,
+      code: submission.code,
+      problemDescription: problemDetail?.description ?? '',
+      difficulty: problemDetail?.difficulty ?? '',
+      timeLimit: problemDetail?.timeLimit ?? null,
+      memoryLimit: problemDetail?.memoryLimit ?? null,
+      creatorName: problemDetail?.creatorName ?? ''
+    }
+  } catch (error) {
+    console.error('Load Submission Detail Error:', error)
+    detailDialogVisible.value = false
+    ElMessage.error('加载提交详情失败，请稍后重试')
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+const formatResult = (status: string) => {
+  const map: Record<string, string> = {
+    ACCEPTED: '通过 (AC)',
+    WRONG_ANSWER: '错误 (WA)',
+    PENDING: '待评测',
+    RUNNING: '评测中',
+    COMPILE_ERROR: '编译失败',
+    RUNTIME_ERROR: '运行时错误',
+    TIMEOUT: '超时',
+    SYSTEM_ERROR: '系统错误',
+    CANCELLED: '已取消'
+  }
+  return map[status] || status || '未知'
+}
+
+const getResultType = (status: string) => {
+  const map: Record<string, 'success' | 'danger' | 'warning' | 'info'> = {
+    ACCEPTED: 'success',
+    WRONG_ANSWER: 'danger',
+    PENDING: 'warning',
+    RUNNING: 'warning',
+    COMPILE_ERROR: 'info',
+    RUNTIME_ERROR: 'info',
+    TIMEOUT: 'info',
+    SYSTEM_ERROR: 'info',
+    CANCELLED: 'info'
+  }
+  return map[status] || 'info'
+}
 
 onMounted(() => {
-  fetchSubmissions();
-});
+  fetchSubmissions()
+})
 </script>
 
 <style scoped>
 .filter-area {
   display: flex;
   align-items: center;
-  gap: 15px; 
+  gap: 15px;
   margin-bottom: 15px;
 }
 

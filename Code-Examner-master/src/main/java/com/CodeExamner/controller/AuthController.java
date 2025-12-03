@@ -63,8 +63,13 @@ public class AuthController {
             return ResponseEntity.badRequest().body(new AuthResponse("邮箱已被注册"));
         }
 
+        UserRole role = registerRequest.getRole();
+        if (role == null) {
+            role = UserRole.STUDENT;
+        }
+
         User user;
-        if (registerRequest.getRole() == UserRole.STUDENT) {
+        if (role == UserRole.STUDENT) {
             Student student = new Student();
             student.setStudentId(registerRequest.getStudentId());
             student.setRealName(registerRequest.getRealName());
@@ -77,7 +82,7 @@ public class AuthController {
         user.setUsername(registerRequest.getUsername());
         user.setPassword(passwordEncoder.encode(registerRequest.getPassword()));
         user.setEmail(registerRequest.getEmail());
-        user.setRole(registerRequest.getRole());
+        user.setRole(role);
 
         User savedUser = userRepository.save(user);
         String jwt = jwtUtil.generateToken(savedUser.getUsername());

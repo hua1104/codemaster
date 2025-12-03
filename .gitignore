@@ -1,0 +1,23 @@
+# 根目录 Git 忽略规则（适用于整个仓库）
+
+# IDE / 编辑器
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# 操作系统生成文件
+.DS_Store
+Thumbs.db
+
+# Node / 前端
+frontend/node_modules/
+frontend/dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Java / Maven
+Code-Examner-master/target/
+

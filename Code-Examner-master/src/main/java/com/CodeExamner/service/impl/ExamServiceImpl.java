@@ -3,6 +3,7 @@ package com.CodeExamner.service.impl;
 
 import com.CodeExamner.entity.*;
 import com.CodeExamner.entity.enums.ExamStatus;
+import com.CodeExamner.entity.enums.UserRole;
 import com.CodeExamner.repository.ExamRepository;
 import com.CodeExamner.repository.ExamProblemRepository;
 import com.CodeExamner.repository.ProblemRepository;
@@ -82,7 +83,11 @@ public class ExamServiceImpl implements ExamService {
     @Override
     public Page<Exam> getExamsByCreator(Pageable pageable) {
         User currentUser = userService.getCurrentUser();
-        // 需要确保 ExamRepository 中有这个方法
+        // 管理员共享考试列表：可以看到所有考试
+        if (currentUser.getRole() == UserRole.ADMIN) {
+            return examRepository.findAll(pageable);
+        }
+        // 教师等用户：只看到自己创建的考试
         return examRepository.findByCreatedById(currentUser.getId(), pageable);
     }
 

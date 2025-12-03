@@ -2,7 +2,7 @@
   <div class="exam-wrapper">
     <el-header class="exam-header">
       <div class="header-left">
-        <h2 class="exam-title">{{ exam.name }}</h2>
+        <h2 class="exam-title">{{ exam.name || '考试详情' }}</h2>
         <el-tag type="warning" size="large" effect="dark" style="margin-left: 20px;">
           {{ isTaking ? '考试进行中' : '考试回顾' }}
         </el-tag>
@@ -27,7 +27,6 @@
     </el-header>
 
     <el-container class="exam-content">
-      
       <el-aside width="250px" class="question-sidebar">
         <el-card shadow="never" class="sidebar-card">
           <template #header>
@@ -56,32 +55,82 @@
         <el-card shadow="hover" class="problem-statement-card">
           <template #header>
             <div class="card-header">
-              <span>问题 {{ currentProblemIndex + 1 }}：</span>
-              <el-tag size="small">{{ exam.problems[currentProblemIndex]?.score }} 分</el-tag>
+              <span>问题 {{ currentProblemIndex + 1 }}</span>
+              <el-tag size="small">{{ exam.problems[currentProblemIndex]?.score || 0 }} 分</el-tag>
             </div>
           </template>
           
-          <div v-html="exam.problems[currentProblemIndex]?.content" class="problem-content"></div>
+          <div v-if="exam.problems.length > 0" class="problem-content">
+            <div v-html="exam.problems[currentProblemIndex]?.content"></div>
+
+            <div v-if="exam.problems[currentProblemIndex]?.type === 'CHOICE'" class="choice-options">
+              <el-radio-group v-model="currentAnswer">
+                <el-radio
+                  v-for="opt in exam.problems[currentProblemIndex]?.options || []"
+                  :key="opt.label"
+                  :label="opt.label"
+                >
+                  {{ opt.label }}. {{ opt.text }}
+                </el-radio>
+              </el-radio-group>
+            </div>
+          </div>
+          <div v-else class="problem-content" style="color: var(--el-text-color-secondary);">
+            本次考试尚未配置题目，请联系老师。
+          </div>
         </el-card>
 
         <el-card shadow="hover" class="answer-card">
           <template #header>
-            作答区（请在下方输入代码或文字）
+            作答区（答案将保存到服务器并参与判分）
           </template>
           
-          <el-input 
-            type="textarea" 
-            :rows="10" 
-            placeholder="在这里输入您的代码或答案..."
-            v-model="currentAnswer"
-            resize="none"
-          />
+          <template v-if="exam.problems[currentProblemIndex]?.type === 'CHOICE'">
+            <p style="margin-bottom: 8px; font-size: 13px; color: var(--el-text-color-secondary);">
+              请选择一个选项作为本题答案。
+            </p>
+            <el-radio-group v-model="currentAnswer">
+              <el-radio
+                v-for="opt in exam.problems[currentProblemIndex]?.options || []"
+                :key="opt.label"
+                :label="opt.label"
+              >
+                {{ opt.label }}. {{ opt.text }}
+              </el-radio>
+            </el-radio-group>
+          </template>
+          <template v-else-if="exam.problems[currentProblemIndex]?.type === 'FILL_BLANK'">
+            <el-input 
+              type="textarea" 
+              :rows="8" 
+              placeholder="请在这里填写本题的答案（如有多个空，可依次写出）。"
+              v-model="currentAnswer"
+              resize="none"
+            />
+          </template>
+          <template v-else>
+            <el-input 
+              type="textarea" 
+              :rows="10" 
+              placeholder="在这里输入您的代码..."
+              v-model="currentAnswer"
+              resize="none"
+            />
+          </template>
         </el-card>
 
         <div class="problem-actions">
           <el-button @click="prevProblem" :disabled="currentProblemIndex === 0">上一题</el-button>
-          <el-button @click="saveDraft" type="info" :icon="Document">暂存答案</el-button>
-          <el-button @click="nextProblem" :disabled="currentProblemIndex === exam.problems.length - 1" type="primary">下一题</el-button>
+          <el-button @click="saveDraft" type="info" :icon="Document">
+            暂存当前题目
+          </el-button>
+          <el-button
+            @click="nextProblem"
+            :disabled="currentProblemIndex === exam.problems.length - 1"
+            type="primary"
+          >
+            下一题
+          </el-button>
         </div>
       </el-main>
     </el-container>
@@ -89,138 +138,272 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import { Timer, Search, Document } from '@element-plus/icons-vue'; 
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useRoute } from 'vue-router'
+import { Timer, Document } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import apiClient from '@/services/apiClient'
 
-// 模拟数据和类型定义
-interface Problem {
-  id: number;
-  status: 'UNANSWERED' | 'ANSWERED' | 'FLAGGED';
-  score: number;
-  content: string;
-  answer: string;
+interface ChoiceOption {
+  label: string
+  text: string
+  correct?: boolean
 }
 
-// 模拟考试状态数据 (在实际项目中应从 Pinia Store 获取)
+interface Problem {
+  id: number
+  status: 'UNANSWERED' | 'ANSWERED' | 'FLAGGED'
+  score: number
+  content: string
+  type: 'CODING' | 'CHOICE' | 'FILL_BLANK'
+  options?: ChoiceOption[]
+  answer: string
+}
+
+const route = useRoute()
+const examId = Number(route.params.id)
+
 const exam = ref({
-  id: 1,
-  name: '软件测试原理期末考试',
-  duration: 90, // 分钟
-  timeLeft: 3600, // 秒 (1小时)
+  id: examId,
+  name: '',
+  duration: 0,
+  timeLeft: 0,
   isTaking: true,
-  problems: [
-    { id: 101, status: 'UNANSWERED', score: 10, content: '<p>什么是黑盒测试？</p>', answer: '' },
-    { id: 102, status: 'ANSWERED', score: 15, content: '<p>请用Java实现一个快速排序。</p>', answer: 'console.log("快排代码...");' },
-    { id: 103, status: 'UNANSWERED', score: 10, content: '<p>解释单元测试的意义。</p>', answer: '' },
-    { id: 104, status: 'FLAGGED', score: 20, content: '<p>计算时间复杂度。</p>', answer: '' },
-    // 更多问题...
-  ] as Problem[]
-});
+  problems: [] as Problem[]
+})
 
-const currentProblemIndex = ref(0);
-const isTaking = computed(() => exam.value.isTaking);
+const currentProblemIndex = ref(0)
+const isTaking = computed(() => exam.value.isTaking)
 
+let timerId: number | null = null
 
-// 【修正后的计算属性】：添加了非空检查来解决 TypeScript/ESLint 警告
-const currentAnswer = computed({
-    // Getter: 使用可选链 ?. 安全地访问 answer 属性
-    get: () => exam.value.problems[currentProblemIndex.value]?.answer || '',
-    
-    set: (val: string) => {
-        const currentProblem = exam.value.problems[currentProblemIndex.value];
-        
-        // 【关键修正】：检查当前题目对象是否存在
-        if (!currentProblem) {
-            console.error("当前题目对象不存在，无法设置答案。");
-            return;
-        }
-
-        // 赋值
-        currentProblem.answer = val;
-        
-        // 自动将状态从未作答改为已作答 (如果作答区有内容)
-        if (val.trim() && currentProblem.status === 'UNANSWERED') {
-            currentProblem.status = 'ANSWERED';
-        }
+const startCountdown = () => {
+  if (timerId !== null) return
+  timerId = window.setInterval(() => {
+    if (exam.value.timeLeft > 0) {
+      exam.value.timeLeft -= 1
+    } else {
+      exam.value.timeLeft = 0
+      exam.value.isTaking = false
+      if (timerId !== null) {
+        clearInterval(timerId)
+        timerId = null
+      }
     }
-});
+  }, 1000)
+}
 
-// 计算属性：格式化剩余时间
+const loadExamData = async () => {
+  try {
+    const [examRes, problemsRes] = await Promise.all([
+      apiClient.get(`/exams/${examId}`),
+      apiClient.get(`/exams/${examId}/problems`)
+    ])
+
+    const examData = examRes.data
+    exam.value.name = examData.title
+    exam.value.duration = examData.duration ?? 0
+
+    // 优先使用后端 remainingTime（分钟），否则用 duration 作为总时长
+    const remainingMinutes = examData.remainingTime ?? examData.duration ?? 0
+    exam.value.timeLeft = Math.max(0, remainingMinutes * 60)
+
+    const problemItems = problemsRes.data as Array<{
+      problemId: number
+      title: string
+      description: string
+      score: number
+      sequence: number
+      type?: 'CODING' | 'CHOICE' | 'FILL_BLANK'
+      options?: string
+    }>
+
+    exam.value.problems = problemItems.map((p) => {
+      let parsedOptions: ChoiceOption[] | undefined
+      if (p.type === 'CHOICE' && p.options) {
+        try {
+          const raw = JSON.parse(p.options) as Array<{ label: string; text: string; correct?: boolean }>
+          parsedOptions = raw.map((o) => ({
+            label: o.label,
+            text: o.text,
+            correct: o.correct
+          }))
+        } catch {
+          parsedOptions = undefined
+        }
+      }
+
+      return {
+        id: p.problemId,
+        status: 'UNANSWERED' as const,
+        score: p.score ?? 0,
+        content: `<h3>${p.title}</h3><p>${p.description || ''}</p>`,
+        type: p.type || 'CODING',
+        options: parsedOptions,
+        answer: ''
+      }
+    })
+
+    if (exam.value.problems.length === 0) {
+      ElMessage.info('本次考试尚未配置题目，请联系老师。')
+    }
+
+    if (exam.value.timeLeft > 0) {
+      startCountdown()
+    } else {
+      exam.value.isTaking = false
+    }
+  } catch (error) {
+    ElMessage.error('加载考试详情失败，请稍后重试')
+  }
+}
+
+const currentAnswer = computed({
+  get() {
+    const currentProblem = exam.value.problems[currentProblemIndex.value]
+    return currentProblem ? currentProblem.answer : ''
+  },
+  set(val: string) {
+    const currentProblem = exam.value.problems[currentProblemIndex.value]
+    if (!currentProblem) {
+      return
+    }
+    currentProblem.answer = val
+    if (val.trim() && currentProblem.status === 'UNANSWERED') {
+      currentProblem.status = 'ANSWERED'
+    }
+  }
+})
+
 const formattedTimeLeft = computed(() => {
-  const seconds = exam.value.timeLeft % 60;
-  const minutes = Math.floor(exam.value.timeLeft / 60) % 60;
-  const hours = Math.floor(exam.value.timeLeft / 3600);
+  const seconds = exam.value.timeLeft % 60
+  const minutes = Math.floor(exam.value.timeLeft / 60) % 60
+  const hours = Math.floor(exam.value.timeLeft / 3600)
   
-  const pad = (num: number) => num.toString().padStart(2, '0');
-  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
-});
+  const pad = (num: number) => num.toString().padStart(2, '0')
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+})
 
-// 方法：获取题目状态对应的 Element Plus Tag 颜色
 const getProblemStatusType = (status: Problem['status']) => {
   switch (status) {
-    case 'ANSWERED': return 'success';
-    case 'FLAGGED': return 'danger';
+    case 'ANSWERED': return 'success'
+    case 'FLAGGED': return 'danger'
     case 'UNANSWERED': 
-    default: return 'info';
+    default: return 'info'
   }
-};
+}
 
-// 题目导航逻辑
 const setCurrentProblem = (index: number) => {
-  // 确保索引有效
   if (index >= 0 && index < exam.value.problems.length) {
-    currentProblemIndex.value = index;
+    currentProblemIndex.value = index
   }
-};
+}
 const prevProblem = () => {
-  setCurrentProblem(currentProblemIndex.value - 1);
-};
+  setCurrentProblem(currentProblemIndex.value - 1)
+}
 const nextProblem = () => {
-  setCurrentProblem(currentProblemIndex.value + 1);
-};
-const saveDraft = () => {
-  // 实际项目中应调用 Pinia action 保存到后端
-  ElMessage.success('答案已暂存！');
-};
+  setCurrentProblem(currentProblemIndex.value + 1)
+}
 
-// 提交试卷逻辑
-const submitExam = () => {
-  const unansweredCount = exam.value.problems.filter(p => p.status === 'UNANSWERED').length;
+const saveDraft = async () => {
+  const currentProblem = exam.value.problems[currentProblemIndex.value]
+  if (!currentProblem) {
+    ElMessage.warning('当前题目不存在')
+    return
+  }
 
-  ElMessageBox.confirm(
-    unansweredCount > 0 
-      ? `您还有 ${unansweredCount} 道题未作答，确定现在提交吗？` 
-      : '您已完成所有题目，确定提交试卷吗？',
-    '提交确认',
-    {
-      confirmButtonText: '确定提交',
-      cancelButtonText: '继续作答',
-      type: 'warning',
-    }
+  if (!currentProblem.answer || !currentProblem.answer.trim()) {
+    ElMessage.warning('请先填写本题的答案或代码')
+    return
+  }
+
+  try {
+    await apiClient.post('/submissions', {
+      problemId: currentProblem.id,
+      examId: exam.value.id,
+      code: currentProblem.answer,
+      language: 'java'
+    })
+
+    ElMessage.success('当前答案已暂存，并已保存到服务器，稍后会自动评测并算分')
+  } catch (error) {
+    ElMessage.error('暂存失败：服务器保存答案时出错，请稍后重试')
+  }
+}
+
+const submitExam = async () => {
+  const unansweredCount = exam.value.problems.filter(p => p.status === 'UNANSWERED').length
+
+  try {
+    await ElMessageBox.confirm(
+      unansweredCount > 0 
+        ? `您还有 ${unansweredCount} 道题未作答，确定现在提交吗？` 
+        : '您已完成所有题目，确定提交试卷吗？',
+      '提交确认',
+      {
+        confirmButtonText: '确定提交',
+        cancelButtonText: '继续作答',
+        type: 'warning',
+      }
+    )
+  } catch {
+    ElMessage.info('已取消提交，请继续作答。')
+    return
+  }
+
+  const answeredProblems = exam.value.problems.filter(
+    (p) => p.answer && p.answer.trim()
   )
-  .then(() => {
-    // 实际项目中：调用 Pinia action 提交最终答案
-    ElMessage.success('试卷提交成功！正在等待批改结果...');
-    exam.value.isTaking = false; // 停止考试状态
-  })
-  .catch(() => {
-    ElMessage.info('已取消提交，请继续作答。');
-  });
-};
+
+  if (answeredProblems.length === 0) {
+    ElMessage.warning('您尚未作答任何题目，已取消提交。')
+    return
+  }
+
+  try {
+    await Promise.all(
+      answeredProblems.map((p) =>
+        apiClient.post('/submissions', {
+          problemId: p.id,
+          examId: exam.value.id,
+          code: p.answer,
+          language: 'java'
+        })
+      )
+    )
+
+    ElMessage.success(`试卷提交成功，已向服务器提交 ${answeredProblems.length} 道题。系统将自动评测并计算得分，您可在“提交记录”中查看结果。`)
+    exam.value.isTaking = false
+    if (timerId !== null) {
+      clearInterval(timerId)
+      timerId = null
+    }
+  } catch (error) {
+    ElMessage.error('提交试卷失败：发送答案到服务器时出错，请稍后重试')
+  }
+}
+
+onMounted(() => {
+  loadExamData().catch(() => {})
+})
+
+onBeforeUnmount(() => {
+  if (timerId !== null) {
+    clearInterval(timerId)
+    timerId = null
+  }
+})
 </script>
 
 <style scoped>
-/* 考试界面样式 */
 .exam-wrapper {
   height: 100vh;
   display: flex;
   flex-direction: column;
 }
 
-/* 头部样式 */
 .exam-header {
-  background-color: var(--el-color-primary); /* 利用您的主题色 */
+  background-color: var(--el-color-primary);
   color: white;
   display: flex;
   justify-content: space-between;
@@ -248,17 +431,15 @@ const submitExam = () => {
   border-radius: 4px;
 }
 
-/* 主内容区域样式 */
 .exam-content {
   flex-grow: 1;
   overflow: hidden;
-  height: calc(100vh - 60px); /* 减去 Header 的高度 */
+  height: calc(100vh - 60px);
 }
 
-/* 侧边栏样式 */
 .question-sidebar {
   padding: 15px;
-  background-color: #f7f9fa; /* 浅灰色背景 */
+  background-color: #f7f9fa;
   overflow-y: auto;
 }
 .sidebar-card {
@@ -271,10 +452,9 @@ const submitExam = () => {
   padding-top: 10px;
 }
 
-/* 主内容样式 */
 .problem-main {
   padding: 15px;
-  overflow-y: auto; /* 允许内容滚动 */
+  overflow-y: auto;
 }
 .problem-statement-card {
   margin-bottom: 20px;

@@ -2,6 +2,7 @@
 package com.CodeExamner.dto.request;
 
 import com.CodeExamner.entity.enums.Difficulty;
+import com.CodeExamner.entity.enums.ProblemType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -18,6 +19,13 @@ public class ProblemCreateRequest {
 
     @NotNull
     private Difficulty difficulty;
+
+    // 新增：题目类型（编程 / 选择 / 填空等）
+    private ProblemType type;
+
+    // 选择题 / 填空题配置
+    private String options; // 选择题选项（JSON）
+    private String answer;  // 标准答案
 
     @NotNull
     private Integer timeLimit;

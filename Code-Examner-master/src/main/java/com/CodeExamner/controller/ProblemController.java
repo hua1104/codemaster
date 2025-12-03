@@ -34,6 +34,9 @@ public class ProblemController {
         problem.setDescription(request.getDescription());
         problem.setTemplateCode(request.getTemplateCode());
         problem.setDifficulty(request.getDifficulty());
+        problem.setType(request.getType());
+        problem.setOptions(request.getOptions());
+        problem.setAnswer(request.getAnswer());
         problem.setTimeLimit(request.getTimeLimit());
         problem.setMemoryLimit(request.getMemoryLimit());
         problem.setIsPublic(request.getIsPublic());
@@ -52,6 +55,9 @@ public class ProblemController {
         problem.setDescription(request.getDescription());
         problem.setTemplateCode(request.getTemplateCode());
         problem.setDifficulty(request.getDifficulty());
+        problem.setType(request.getType());
+        problem.setOptions(request.getOptions());
+        problem.setAnswer(request.getAnswer());
         problem.setTimeLimit(request.getTimeLimit());
         problem.setMemoryLimit(request.getMemoryLimit());
         problem.setIsPublic(request.getIsPublic());
@@ -139,10 +145,16 @@ public class ProblemController {
         response.setId(problem.getId());
         response.setTitle(problem.getTitle());
         response.setDescription(problem.getDescription());
+        response.setTemplateCode(problem.getTemplateCode());
+        response.setType(problem.getType());
+        response.setOptions(problem.getOptions());
+        response.setAnswer(problem.getAnswer());
         response.setDifficulty(problem.getDifficulty());
         response.setTimeLimit(problem.getTimeLimit());
         response.setMemoryLimit(problem.getMemoryLimit());
-        response.setCreatorName(problem.getCreatedBy().getUsername());
+        if (problem.getCreatedBy() != null) {
+            response.setCreatorName(problem.getCreatedBy().getUsername());
+        }
         response.setCreateTime(problem.getCreateTime());
         response.setIsPublic(problem.getIsPublic());
         return response;

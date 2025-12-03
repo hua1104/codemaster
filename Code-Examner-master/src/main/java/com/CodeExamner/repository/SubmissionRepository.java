@@ -46,4 +46,7 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
     // 还可以添加一些有用的统计方法
     Long countByExamId(Long examId);
     Long countByExamIdAndStatus(Long examId, JudgeStatus status);
+
+    // 最新提交，用于管理员仪表盘
+    List<Submission> findTop10ByOrderBySubmitTimeDesc();
 }

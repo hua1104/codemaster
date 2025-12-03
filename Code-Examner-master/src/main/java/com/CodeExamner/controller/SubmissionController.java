@@ -95,6 +95,7 @@ public class SubmissionController {
         response.setTimeUsed(submission.getTimeUsed());
         response.setMemoryUsed(submission.getMemoryUsed());
         response.setSubmitTime(submission.getSubmitTime());
+        response.setCode(submission.getCode());
         return response;
     }
 }

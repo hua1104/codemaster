@@ -27,6 +27,15 @@ export default defineConfig({
     }
   },
   server: {
-    // ... 其他配置不变
+    port: 5173,
+    host: true,
+    proxy: {
+      // 前端发出的 /api/* 请求，转发到后端 Spring Boot
+      // 例如：/api/auth/register -> http://localhost:8081/api/auth/register
+      '/api': {
+        target: 'http://localhost:8081',
+        changeOrigin: true
+      }
+    }
   }
 })

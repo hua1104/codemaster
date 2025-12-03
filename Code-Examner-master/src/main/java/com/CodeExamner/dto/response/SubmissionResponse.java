@@ -17,6 +17,8 @@ public class SubmissionResponse {
     private Integer timeUsed;
     private Integer memoryUsed;
     private LocalDateTime submitTime;
+    // 返回提交的代码内容，便于在前端查看详情
+    private String code;
 
     // 便捷方法
     public boolean isAccepted() {

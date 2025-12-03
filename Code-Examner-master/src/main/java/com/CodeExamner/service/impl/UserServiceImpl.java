@@ -1,6 +1,8 @@
 // service/impl/UserServiceImpl.java
 package com.CodeExamner.service.impl;
 
+import com.CodeExamner.dto.request.UserProfileUpdateRequest;
+import com.CodeExamner.entity.Student;
 import com.CodeExamner.entity.User;
 import com.CodeExamner.entity.enums.UserRole;
 import com.CodeExamner.repository.UserRepository;
@@ -93,6 +95,30 @@ public class UserServiceImpl implements UserService {
         }
         currentUser.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(currentUser);
+    }
+
+    @Override
+    public User updateCurrentUserProfile(UserProfileUpdateRequest request) {
+        User currentUser = getCurrentUser();
+
+        if (currentUser instanceof Student) {
+            Student student = (Student) currentUser;
+
+            if (request.getStudentId() != null) {
+                student.setStudentId(request.getStudentId());
+            }
+            if (request.getRealName() != null) {
+                student.setRealName(request.getRealName());
+            }
+            if (request.getClassName() != null) {
+                student.setClassName(request.getClassName());
+            }
+
+            return userRepository.save(student);
+        }
+
+        // 目前非学生用户暂不支持前端自助修改基础信息
+        return currentUser;
     }
 
     // 新增的管理员方法

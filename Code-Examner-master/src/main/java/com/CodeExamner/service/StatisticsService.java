@@ -2,8 +2,8 @@
 package com.CodeExamner.service;
 
 import com.CodeExamner.dto.response.StatisticsResponse;
+import com.CodeExamner.entity.enums.ExamStatus;
 import com.CodeExamner.entity.enums.JudgeStatus;
-import com.CodeExamner.judge0.Judge0Status;
 import com.CodeExamner.repository.ExamRepository;
 import com.CodeExamner.repository.ProblemRepository;
 import com.CodeExamner.repository.SubmissionRepository;
@@ -46,11 +46,11 @@ public class StatisticsService {
 
         // 考试统计
         response.setTotalExams(examRepository.count());
-        response.setOngoingExams(examRepository.countByStatus("ONGOING"));
-        response.setScheduledExams(examRepository.countByStatus("SCHEDULED"));
-        response.setFinishedExams(examRepository.countByStatus("FINISHED"));
-        response.setDraftExams(examRepository.countByStatus("DRAFT"));
-        response.setCancelledExams(examRepository.countByStatus("CANCELLED"));
+        response.setOngoingExams(examRepository.countByStatus(ExamStatus.ONGOING));
+        response.setScheduledExams(examRepository.countByStatus(ExamStatus.SCHEDULED));
+        response.setFinishedExams(examRepository.countByStatus(ExamStatus.FINISHED));
+        response.setDraftExams(examRepository.countByStatus(ExamStatus.DRAFT));
+        response.setCancelledExams(examRepository.countByStatus(ExamStatus.CANCELLED));
 
         // 提交统计
         response.setTotalSubmissions(submissionRepository.count());
@@ -71,7 +71,7 @@ public class StatisticsService {
         stats.put("acceptanceRate", totalSubmissions > 0 ?
                 (double) acceptedSubmissions / totalSubmissions * 100 : 0);
 
-        // 最近活动
+        // 最近一周提交次数
         LocalDateTime oneWeekAgo = LocalDateTime.now().minusWeeks(1);
         Long recentSubmissions = submissionRepository.countByStudentIdAndSubmitTimeAfter(userId, oneWeekAgo);
         stats.put("recentSubmissions", recentSubmissions);
@@ -93,3 +93,4 @@ public class StatisticsService {
         return stats;
     }
 }
+

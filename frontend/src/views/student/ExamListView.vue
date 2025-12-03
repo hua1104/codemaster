@@ -19,22 +19,82 @@
             <el-icon><Search /></el-icon>
           </template>
         </el-input>
-        
+
         <el-button :icon="Refresh" @click="fetchExams" plain>
           刷新列表
         </el-button>
       </div>
 
       <el-tabs v-model="activeTab" class="exam-tabs" @tab-change="fetchExams">
-        
-        <el-tab-pane label="进行中/待开始" name="active">
-          <ExamTable :data="activeExams" :loading="loading" @view-exam="handleViewExam" />
+        <el-tab-pane label="进行中 / 待开始" name="active">
+          <el-table
+            :data="activeExams"
+            v-loading="loading"
+            :style="{ width: '100%' }"
+            stripe
+          >
+            <el-table-column prop="name" label="考试名称" min-width="200" show-overflow-tooltip />
+
+            <el-table-column label="状态" width="100">
+              <template #default="scope">
+                <el-tag :type="getStatusType(scope.row.status)" effect="light" size="small">
+                  {{ formatStatus(scope.row.status) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+
+            <el-table-column prop="startTime" label="开始时间" width="180" />
+            <el-table-column prop="duration" label="时长(分钟)" width="120" />
+
+            <el-table-column label="操作" width="120" fixed="right">
+              <template #default="scope">
+                <el-button
+                  link
+                  :type="scope.row.status === 'ONGOING' ? 'primary' : 'info'"
+                  size="small"
+                  @click="handleViewExam(scope.row.id)"
+                >
+                  {{ scope.row.status === 'ONGOING' ? '进入考试' : '查看详情' }}
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
         </el-tab-pane>
-        
-        <el-tab-pane label="已结束/已评分" name="finished">
-          <ExamTable :data="finishedExams" :loading="loading" @view-exam="handleViewExam" />
+
+        <el-tab-pane label="已结束" name="finished">
+          <el-table
+            :data="finishedExams"
+            v-loading="loading"
+            :style="{ width: '100%' }"
+            stripe
+          >
+            <el-table-column prop="name" label="考试名称" min-width="200" show-overflow-tooltip />
+
+            <el-table-column label="状态" width="100">
+              <template #default="scope">
+                <el-tag :type="getStatusType(scope.row.status)" effect="light" size="small">
+                  {{ formatStatus(scope.row.status) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+
+            <el-table-column prop="startTime" label="开始时间" width="180" />
+            <el-table-column prop="duration" label="时长(分钟)" width="120" />
+
+            <el-table-column label="操作" width="120" fixed="right">
+              <template #default="scope">
+                <el-button
+                  link
+                  type="info"
+                  size="small"
+                  @click="handleViewExam(scope.row.id)"
+                >
+                  查看详情
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
         </el-tab-pane>
-      
       </el-tabs>
 
       <div class="pagination-container">
@@ -42,202 +102,134 @@
           @size-change="handleSizeChange"
           @current-change="handleCurrentChange"
           :current-page="pagination.page"
-          :page-sizes="[10, 20, 50]"
           :page-size="pagination.limit"
-          layout="total, sizes, prev, pager, next, jumper"
           :total="pagination.total"
+          layout="total, prev, pager, next, jumper"
           background
         />
       </div>
-
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, defineComponent } from 'vue';
-import { useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
-import { Search, Refresh, Timer, Finished } from '@element-plus/icons-vue';
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { Search, Refresh } from '@element-plus/icons-vue'
+import apiClient from '@/services/apiClient'
+import { endpoints } from '@/services/endpoints'
 
-const router = useRouter();
+const router = useRouter()
 
-// --- 类型定义 ---
+type ExamStatus = 'DRAFT' | 'SCHEDULED' | 'ONGOING' | 'FINISHED' | 'CANCELLED'
+
 interface Exam {
-  id: number;
-  name: string;
-  status: 'SCHEDULED' | 'RUNNING' | 'FINISHED' | 'GRADED';
-  startTime: string;
-  duration: number; // 分钟
-  score?: number; // 仅对 FINISHED/GRADED 有效
-  submissionId?: number; // 提交记录ID
+  id: number
+  name: string
+  status: ExamStatus
+  startTime: string
+  duration: number
 }
 
-// --- 辅助组件：考试表格 (简化模板) ---
-const ExamTable = defineComponent({
-    props: {
-        data: {
-            type: Array as () => Exam[],
-            required: true,
-        },
-        loading: Boolean,
-    },
-    emits: ['view-exam'],
-    setup(props, { emit }) {
-        // 辅助函数：根据状态获取标签类型
-        const getStatusType = (status: Exam['status']) => {
-            switch (status) {
-                case 'RUNNING': return 'success';
-                case 'SCHEDULED': return 'warning';
-                case 'GRADED': return 'primary';
-                case 'FINISHED': return 'info';
-                default: return 'info';
-            }
-        };
-
-        // 辅助函数：格式化状态文本
-        const formatStatus = (status: Exam['status']) => {
-            const map = {
-                'RUNNING': '进行中',
-                'SCHEDULED': '待开始',
-                'FINISHED': '已结束',
-                'GRADED': '已评分',
-            };
-            return map[status] || '未知';
-        };
-
-        const handleAction = (exam: Exam) => {
-            emit('view-exam', exam.id);
-        };
-
-        return {
-            getStatusType,
-            formatStatus,
-            handleAction,
-            Timer,
-            Finished
-        };
-    },
-    template: `
-        <el-table 
-            :data="data" 
-            v-loading="loading" 
-            :style="{ width: '100%' }"
-            stripe
-        >
-            <el-table-column prop="name" label="考试名称" min-width="200" show-overflow-tooltip />
-            
-            <el-table-column label="状态" width="100">
-                <template #default="scope">
-                    <el-tag :type="getStatusType(scope.row.status)" effect="light" size="small">
-                        {{ formatStatus(scope.row.status) }}
-                    </el-tag>
-                </template>
-            </el-table-column>
-
-            <el-table-column prop="startTime" label="开始时间" width="180" />
-            <el-table-column prop="duration" label="时长(分钟)" width="120" />
-            
-            <el-table-column label="得分" width="100">
-                <template #default="scope">
-                    <span v-if="scope.row.status === 'GRADED'">
-                        <el-tag type="danger" size="small">{{ scope.row.score }}</el-tag>
-                    </span>
-                    <span v-else>-</span>
-                </template>
-            </el-table-column>
-
-            <el-table-column label="操作" width="100" fixed="right">
-                <template #default="scope">
-                    <el-button 
-                        link 
-                        :type="scope.row.status === 'FINISHED' || scope.row.status === 'GRADED' ? 'success' : 'primary'"
-                        size="small" 
-                        @click="handleAction(scope.row)"
-                    >
-                        {{ scope.row.status === 'RUNNING' ? '进入考试' : (scope.row.status === 'SCHEDULED' ? '查看详情' : '查看结果') }}
-                    </el-button>
-                </template>
-            </el-table-column>
-        </el-table>
-    `
-});
-
-// --- 状态管理 ---
-const activeTab = ref('active');
-const loading = ref(false);
-const searchQuery = ref('');
-const activeExams = ref<Exam[]>([]);
-const finishedExams = ref<Exam[]>([]);
+const activeTab = ref<'active' | 'finished'>('active')
+const loading = ref(false)
+const searchQuery = ref('')
+const activeExams = ref<Exam[]>([])
+const finishedExams = ref<Exam[]>([])
 const pagination = ref({
   page: 1,
   limit: 10,
-  total: 0, // 总数需要动态计算，这里简化
-});
+  total: 0
+})
 
-// --- 模拟数据 ---
-const mockData: Exam[] = [
-    { id: 1001, name: 'Web开发期中测试', status: 'RUNNING', startTime: '2025-11-26 10:00:00', duration: 90 },
-    { id: 1002, name: 'Java算法设计', status: 'SCHEDULED', startTime: '2025-12-15 14:30:00', duration: 120 },
-    { id: 1003, name: '软件工程原理', status: 'GRADED', startTime: '2025-10-01 09:00:00', duration: 60, score: 92 },
-    { id: 1004, name: '数据库系统基础', status: 'FINISHED', startTime: '2025-10-10 13:00:00', duration: 75, submissionId: 401 },
-    { id: 1005, name: '操作系统原理', status: 'SCHEDULED', startTime: '2025-12-25 10:00:00', duration: 180 },
-    { id: 1006, name: '计算机网络', status: 'GRADED', startTime: '2025-09-05 15:00:00', duration: 60, score: 78 },
-];
-for (let i = 7; i <= 25; i++) {
-    mockData.push({
-        id: 1000 + i,
-        name: `模拟考试 ${i}`,
-        status: i % 2 === 0 ? 'SCHEDULED' : 'FINISHED',
-        startTime: `2025-11-${i % 30 + 1} 10:00:00`,
-        duration: 60,
-    });
+const formatDateTime = (value: string | null | undefined) => {
+  if (!value) return ''
+  try {
+    const d = new Date(value)
+    return d.toLocaleString()
+  } catch {
+    return value
+  }
 }
 
+const getStatusType = (status: ExamStatus) => {
+  switch (status) {
+    case 'ONGOING': return 'success'
+    case 'SCHEDULED': return 'warning'
+    case 'FINISHED': return 'info'
+    case 'CANCELLED': return 'danger'
+    case 'DRAFT':
+    default: return 'info'
+  }
+}
 
-// --- 数据获取（Mock实现） ---
+const formatStatus = (status: ExamStatus) => {
+  const map: Record<ExamStatus, string> = {
+    ONGOING: '进行中',
+    SCHEDULED: '待开始',
+    FINISHED: '已结束',
+    CANCELLED: '已取消',
+    DRAFT: '草稿'
+  }
+  return map[status] || '未知'
+}
+
 const fetchExams = async () => {
-  loading.value = true;
-  await new Promise(resolve => setTimeout(resolve, 500)); 
-  
-  let filteredData = mockData.filter(exam => 
-    exam.name.includes(searchQuery.value) || exam.id.toString().includes(searchQuery.value)
-  );
+  loading.value = true
+  try {
+    const { data: pageData } = await apiClient.get(endpoints.exams.list, {
+      params: {
+        page: pagination.value.page - 1,
+        size: pagination.value.limit
+      }
+    })
 
-  activeExams.value = filteredData.filter(e => e.status === 'SCHEDULED' || e.status === 'RUNNING');
-  finishedExams.value = filteredData.filter(e => e.status === 'FINISHED' || e.status === 'GRADED');
-  
-  // 简单处理分页（实际应在 API 层面处理分页）
-  pagination.value.total = activeTab.value === 'active' ? activeExams.value.length : finishedExams.value.length;
+    const exams = (pageData.content ?? []) as any[]
+    const mapped: Exam[] = exams.map((e) => ({
+      id: e.id,
+      name: e.title,
+      status: e.status as ExamStatus,
+      startTime: formatDateTime(e.startTime),
+      duration: e.duration ?? 0
+    }))
 
-  loading.value = false;
-};
+    const filtered = mapped.filter(exam =>
+      !searchQuery.value ||
+      exam.name.includes(searchQuery.value) ||
+      exam.id.toString().includes(searchQuery.value)
+    )
 
-// --- 分页事件处理 ---
-// 实际分页逻辑需要根据当前 activeTab 再次调用 API，并传递 page/limit 参数
+    activeExams.value = filtered.filter(e => e.status === 'SCHEDULED' || e.status === 'ONGOING')
+    finishedExams.value = filtered.filter(e => e.status === 'FINISHED' || e.status === 'CANCELLED')
+
+    pagination.value.total = activeTab.value === 'active' ? activeExams.value.length : finishedExams.value.length
+  } catch (error) {
+    console.error('Fetch Exam List Error:', error)
+    ElMessage.error('加载考试列表失败，请稍后重试')
+  } finally {
+    loading.value = false
+  }
+}
+
 const handleSizeChange = (val: number) => {
-    pagination.value.limit = val;
-    pagination.value.page = 1;
-    ElMessage.info(`模拟 API 调用: ${activeTab.value} 列表，每页 ${val} 条`);
-    // fetchExams(); // 在实际项目中调用
-};
+  pagination.value.limit = val
+  pagination.value.page = 1
+  fetchExams()
+}
 
 const handleCurrentChange = (val: number) => {
-    pagination.value.page = val;
-    ElMessage.info(`模拟 API 调用: ${activeTab.value} 列表，第 ${val} 页`);
-    // fetchExams(); // 在实际项目中调用
-};
-
-// --- 操作方法 ---
+  pagination.value.page = val
+  fetchExams()
+}
 
 const handleViewExam = (id: number) => {
-    // 跳转到考试详情页 (或直接进入考试页)
-    router.push({ name: 'StudentExamDetail', params: { id: id.toString() } });
-};
+  router.push({ name: 'StudentExamDetail', params: { id: id.toString() } })
+}
 
 onMounted(() => {
-  fetchExams();
-});
+  fetchExams()
+})
 </script>
 
 <style scoped>
@@ -257,3 +249,4 @@ onMounted(() => {
   justify-content: flex-end;
 }
 </style>
+

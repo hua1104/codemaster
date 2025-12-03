@@ -6,9 +6,8 @@
                     <h2>用户列表</h2>
                     <el-button 
                         type="primary" 
-                        :icon="Plus" 
-                        disabled 
-                        title="暂未实现用户创建功能"
+                        :icon="Plus"
+                        @click="openCreateDialog"
                     >
                         新增用户
                     </el-button>
@@ -72,6 +71,51 @@
                     background
                 />
             </div>
+
+            <el-dialog
+                v-model="createDialogVisible"
+                title="新增用户"
+                width="500px"
+            >
+                <el-form label-width="100px" class="user-info-form">
+                    <el-form-item label="用户名">
+                        <el-input v-model="createForm.username" placeholder="请输入用户名" />
+                    </el-form-item>
+                    <el-form-item label="邮箱">
+                        <el-input v-model="createForm.email" placeholder="请输入邮箱" />
+                    </el-form-item>
+                    <el-form-item label="密码">
+                        <el-input v-model="createForm.password" placeholder="请输入初始密码" type="password" show-password />
+                    </el-form-item>
+                    <el-form-item label="角色">
+                        <el-select v-model="createForm.role" placeholder="请选择角色" style="width: 160px;">
+                            <el-option label="管理员" value="ADMIN" />
+                            <el-option label="学生" value="STUDENT" />
+                        </el-select>
+                    </el-form-item>
+
+                    <template v-if="createForm.role === 'STUDENT'">
+                        <el-form-item label="学号">
+                            <el-input v-model="createForm.studentId" placeholder="请输入学号" />
+                        </el-form-item>
+                        <el-form-item label="姓名">
+                            <el-input v-model="createForm.realName" placeholder="请输入姓名" />
+                        </el-form-item>
+                        <el-form-item label="班级">
+                            <el-input v-model="createForm.className" placeholder="请输入班级" />
+                        </el-form-item>
+                    </template>
+                </el-form>
+
+                <template #footer>
+                    <span class="dialog-footer">
+                        <el-button @click="createDialogVisible = false">取 消</el-button>
+                        <el-button type="primary" :loading="createLoading" @click="handleCreate">
+                            确 定
+                        </el-button>
+                    </span>
+                </template>
+            </el-dialog>
         </el-card>
     </div>
 </template>
@@ -102,16 +146,38 @@ interface QueryForm {
     role: UserRole | '';
 }
 
+interface CreateUserForm {
+    username: string;
+    email: string;
+    password: string;
+    role: UserRole;
+    studentId?: string;
+    realName?: string;
+    className?: string;
+}
+
 // --- 状态管理 ---
 const userList = ref<User[]>([]);
 const total = ref(0);
 const loading = ref(false);
+const createDialogVisible = ref(false);
+const createLoading = ref(false);
 
 const queryForm = reactive<QueryForm>({
     page: 1,
     size: 10,
     keyword: '',
     role: '',
+});
+
+const createForm = reactive<CreateUserForm>({
+    username: '',
+    email: '',
+    password: '',
+    role: 'STUDENT',
+    studentId: '',
+    realName: '',
+    className: '',
 });
 
 // --- API 调用：获取用户列表（管理员权限） ---
@@ -128,7 +194,14 @@ const fetchUserList = async () => {
         });
 
         const pageData = response.data;
-        userList.value = pageData.content ?? [];
+        const items = (pageData.content ?? []) as any[];
+        userList.value = items.map((u) => ({
+            id: u.id,
+            username: u.username,
+            email: u.email,
+            role: u.role,
+            createdAt: u.createTime,
+        }));
         total.value = pageData.totalElements ?? 0;
         if (typeof pageData.number === 'number') {
             queryForm.page = pageData.number + 1;
@@ -153,6 +226,50 @@ const handlePageChange = (newPage: number) => {
     fetchUserList();
 };
 
+const openCreateDialog = () => {
+    createForm.username = '';
+    createForm.email = '';
+    createForm.password = '';
+    createForm.role = 'STUDENT';
+    createForm.studentId = '';
+    createForm.realName = '';
+    createForm.className = '';
+    createDialogVisible.value = true;
+};
+
+const handleCreate = async () => {
+    if (!createForm.username.trim()) {
+        ElMessage.warning('请输入用户名');
+        return;
+    }
+    if (!createForm.password.trim()) {
+        ElMessage.warning('请输入初始密码');
+        return;
+    }
+
+    createLoading.value = true;
+    try {
+        await apiClient.post(endpoints.admin.users, {
+            username: createForm.username,
+            email: createForm.email,
+            password: createForm.password,
+            role: createForm.role,
+            studentId: createForm.role === 'STUDENT' ? createForm.studentId : undefined,
+            realName: createForm.realName,
+            className: createForm.role === 'STUDENT' ? createForm.className : undefined,
+        });
+
+        ElMessage.success('用户创建成功');
+        createDialogVisible.value = false;
+        fetchUserList();
+    } catch (error) {
+        ElMessage.error('创建用户失败，请检查输入或稍后重试');
+        console.error('Create User Error:', error);
+    } finally {
+        createLoading.value = false;
+    }
+};
+
 const handleEditRole = (id: number) => {
     // 实际逻辑应弹出对话框供管理员修改用户角色
     ElMessage.info(`尝试修改用户 ID: ${id} 的角色`);
@@ -169,10 +286,8 @@ const handleDelete = (id: number) => {
         }
     ).then(async () => {
         try {
-            // 🚨 替换为您的实际后端 API 地址 🚨
-            // await axios.delete(`/api/admin/users/${id}`);
-            
-            ElMessage.success('删除成功！(API调用待实现)');
+            await apiClient.delete(`${endpoints.admin.users}/${id}`);
+            ElMessage.success('删除成功！');
             fetchUserList();
         } catch (error) {
             ElMessage.error('删除失败，请重试！');
