@@ -56,9 +56,48 @@
         <el-form-item label="账号类型" prop="role">
           <el-radio-group v-model="registerForm.role">
             <el-radio label="STUDENT">学生</el-radio>
+            <el-radio label="TEACHER">教师</el-radio>
             <el-radio label="ADMIN">管理员</el-radio>
           </el-radio-group>
         </el-form-item>
+
+        <!-- 学生额外信息：学号 / 姓名 / 班级（加入班级） -->
+        <template v-if="registerForm.role === 'STUDENT'">
+          <el-form-item label="学号" prop="studentId">
+            <el-input
+              v-model="registerForm.studentId"
+              placeholder="请输入学号"
+              clearable
+            />
+          </el-form-item>
+
+          <el-form-item label="姓名" prop="realName">
+            <el-input
+              v-model="registerForm.realName"
+              placeholder="请输入姓名"
+              clearable
+            />
+          </el-form-item>
+
+          <el-form-item label="加入班级" prop="className">
+            <el-input
+              v-model="registerForm.className"
+              placeholder="请输入班级名称，例如 计科21-1 班"
+              clearable
+            />
+          </el-form-item>
+        </template>
+
+        <!-- 教师额外信息：姓名（可选但推荐填写） -->
+        <template v-else-if="registerForm.role === 'TEACHER'">
+          <el-form-item label="姓名" prop="realName">
+            <el-input
+              v-model="registerForm.realName"
+              placeholder="请输入教师姓名"
+              clearable
+            />
+          </el-form-item>
+        </template>
 
         <el-form-item>
           <el-button
@@ -102,7 +141,10 @@ const registerForm = reactive<RegisterPayload & { confirmPassword: string }>({
   email: '',
   password: '',
   confirmPassword: '',
-  role: 'STUDENT'
+  role: 'STUDENT',
+  studentId: '',
+  realName: '',
+  className: ''
 })
 
 const validatePass2 = (rule: any, value: any, callback: any) => {
@@ -133,6 +175,39 @@ const registerRules = reactive<FormRules>({
   ],
   role: [
     { required: true, message: '请选择账号类型', trigger: 'change' }
+  ],
+  studentId: [
+    {
+      validator: (_, value, callback) => {
+        if (registerForm.role !== 'STUDENT') return callback()
+        if (!value || !value.trim()) return callback(new Error('学生注册时必须填写学号'))
+        callback()
+      },
+      trigger: 'blur'
+    }
+  ],
+  realName: [
+    {
+      validator: (_, value, callback) => {
+        if (registerForm.role === 'STUDENT' && (!value || !value.trim())) {
+          return callback(new Error('学生注册时必须填写姓名'))
+        }
+        // 教师填写姓名是推荐但非强制，这里不强制校验
+        callback()
+      },
+      trigger: 'blur'
+    }
+  ],
+  className: [
+    {
+      validator: (_, value, callback) => {
+        if (registerForm.role === 'STUDENT' && (!value || !value.trim())) {
+          return callback(new Error('请输入要加入的班级名称'))
+        }
+        callback()
+      },
+      trigger: 'blur'
+    }
   ]
 })
 
@@ -143,11 +218,20 @@ const handleRegister = async () => {
     if (!valid) return
     loading.value = true
     try {
+      if (registerForm.role === 'ADMIN' && registerForm.email !== '0000@qq.com') {
+        ElMessage.error('注册管理员账号必须使用指定邮箱：0000@qq.com')
+        loading.value = false
+        return
+      }
+
       const payload: RegisterPayload = {
         username: registerForm.username,
         email: registerForm.email,
         password: registerForm.password,
-        role: registerForm.role
+        role: registerForm.role,
+        studentId: registerForm.role === 'STUDENT' ? registerForm.studentId : undefined,
+        realName: registerForm.realName || undefined,
+        className: registerForm.role === 'STUDENT' ? registerForm.className : undefined
       }
 
       await authStore.register(payload)
@@ -155,8 +239,11 @@ const handleRegister = async () => {
       if (authStore.role === 'ADMIN') {
         ElMessage.success('管理员注册并登录成功')
         router.push('/admin/dashboard')
+      } else if (authStore.role === 'TEACHER') {
+        ElMessage.success('教师注册并登录成功')
+        router.push('/teacher/dashboard')
       } else {
-        ElMessage.success('注册成功，已为您登录')
+        ElMessage.success('学生注册并登录成功')
         router.push('/dashboard')
       }
     } catch (error) {
@@ -209,4 +296,3 @@ const goToLogin = () => {
   margin-top: 15px;
 }
 </style>
-

@@ -17,6 +17,9 @@ public interface ProblemRepository extends JpaRepository<Problem, Long>, JpaSpec
     Page<Problem> findAccessibleProblems(Long userId, Pageable pageable);
 
     Page<Problem> findByCreatedById(Long userId, Pageable pageable);
+
     Long countByIsPublicTrue();
 
+    // 统计某用户创建的题目数量（教师用）
+    Long countByCreatedById(Long userId);
 }

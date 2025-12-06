@@ -36,4 +36,10 @@ public interface ExamRepository extends JpaRepository<Exam, Long> {
 
     // 统计不同状态的考试数量
     Long countByStatus(ExamStatus status);
+
+    // 按创建者统计考试数量（教师个人数据）
+    Long countByCreatedById(Long teacherId);
+
+    // 按创建者 + 状态统计考试数量
+    Long countByCreatedByIdAndStatus(Long teacherId, ExamStatus status);
 }

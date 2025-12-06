@@ -33,5 +33,10 @@ export const endpoints = {
   },
   statistics: {
     student: '/statistics/student'
+  },
+  teacher: {
+    dashboard: '/teacher/dashboard',
+    classes: '/teacher/classes',
+    scores: '/teacher/scores'
   }
 }

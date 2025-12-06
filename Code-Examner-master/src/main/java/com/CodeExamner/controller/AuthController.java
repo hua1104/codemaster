@@ -68,6 +68,14 @@ public class AuthController {
             role = UserRole.STUDENT;
         }
 
+        // 管理员注册需要特定邮箱
+        if (role == UserRole.ADMIN) {
+            if (registerRequest.getEmail() == null ||
+                    !registerRequest.getEmail().equalsIgnoreCase("0000@qq.com")) {
+                return ResponseEntity.badRequest().body(new AuthResponse("注册管理员账号必须使用指定邮箱：0000@qq.com"));
+            }
+        }
+
         User user;
         if (role == UserRole.STUDENT) {
             Student student = new Student();

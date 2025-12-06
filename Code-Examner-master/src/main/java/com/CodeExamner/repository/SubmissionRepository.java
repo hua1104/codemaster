@@ -49,4 +49,58 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
 
     // 最新提交，用于管理员仪表盘
     List<Submission> findTop10ByOrderBySubmitTimeDesc();
+
+    // ============== 为教师统计新增的方法 ==============
+
+    // 某教师创建的考试下收到的总提交数
+    @Query("SELECT COUNT(s) FROM Submission s WHERE s.exam.createdBy.id = :teacherId")
+    Long countByExamCreatorId(Long teacherId);
+
+    // 某教师考试下参与过的去重学生数
+    @Query("SELECT COUNT(DISTINCT s.student.id) FROM Submission s WHERE s.exam.createdBy.id = :teacherId")
+    Long countDistinctStudentsByExamCreatorId(Long teacherId);
+
+    // 某教师考试下涉及的去重班级名称
+    @Query("""
+           SELECT DISTINCT s.student.className
+           FROM Submission s
+           WHERE s.exam.createdBy.id = :teacherId
+             AND s.student.className IS NOT NULL
+           """)
+    List<String> findDistinctClassNamesByExamCreatorId(Long teacherId);
+
+    // 按教师 + 班级统计学生数 / 提交数 / 平均分
+    @Query("""
+           SELECT COUNT(DISTINCT s.student.id)
+           FROM Submission s
+           WHERE s.exam.createdBy.id = :teacherId
+             AND s.student.className = :className
+           """)
+    Long countDistinctStudentsByExamCreatorIdAndClassName(Long teacherId, String className);
+
+    @Query("""
+           SELECT COUNT(s)
+           FROM Submission s
+           WHERE s.exam.createdBy.id = :teacherId
+             AND s.student.className = :className
+           """)
+    Long countSubmissionsByExamCreatorIdAndClassName(Long teacherId, String className);
+
+    @Query("""
+           SELECT AVG(s.score)
+           FROM Submission s
+           WHERE s.exam.createdBy.id = :teacherId
+             AND s.student.className = :className
+             AND s.score IS NOT NULL
+           """)
+    Double findAverageScoreByExamCreatorIdAndClassName(Long teacherId, String className);
+
+    // 单个考试的平均得分（按提交记录）
+    @Query("""
+           SELECT AVG(s.score)
+           FROM Submission s
+           WHERE s.exam.id = :examId
+             AND s.score IS NOT NULL
+           """)
+    Double findAverageScoreByExamId(Long examId);
 }

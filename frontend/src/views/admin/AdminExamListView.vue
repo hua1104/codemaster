@@ -7,7 +7,7 @@
           <el-button
             type="primary"
             :icon="Plus"
-            @click="router.push({ name: 'AdminExamCreate' })"
+            @click="handleCreate"
           >
             创建考试
           </el-button>
@@ -76,14 +76,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, onMounted, computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import apiClient from '@/services/apiClient'
 import { endpoints } from '@/services/endpoints'
 
 const router = useRouter()
+const route = useRoute()
+
+// 当前是否处于教师端（/teacher/...），用于决定路由跳转目的地
+const isTeacherContext = computed(() => route.path.startsWith('/teacher'))
 
 type ExamStatus = 'DRAFT' | 'SCHEDULED' | 'ONGOING' | 'FINISHED' | 'CANCELLED'
 
@@ -150,8 +154,15 @@ const handlePageChange = (newPage: number) => {
   fetchExamList()
 }
 
+const handleCreate = () => {
+  router.push({ name: isTeacherContext.value ? 'TeacherExamCreate' : 'AdminExamCreate' })
+}
+
 const handleEdit = (id: number) => {
-  router.push({ name: 'AdminExamEdit', params: { id: id.toString() } })
+  router.push({
+    name: isTeacherContext.value ? 'TeacherExamEdit' : 'AdminExamEdit',
+    params: { id: id.toString() }
+  })
 }
 
 const handleDelete = (id: number) => {
@@ -243,4 +254,3 @@ onMounted(() => {
   margin-top: 20px;
 }
 </style>
-

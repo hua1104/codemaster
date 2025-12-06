@@ -7,6 +7,7 @@ import com.CodeExamner.entity.enums.UserRole;
 import com.CodeExamner.repository.ExamRepository;
 import com.CodeExamner.repository.ExamProblemRepository;
 import com.CodeExamner.repository.ProblemRepository;
+import com.CodeExamner.repository.SubmissionRepository;
 import com.CodeExamner.service.ExamService;
 import com.CodeExamner.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,6 +30,9 @@ public class ExamServiceImpl implements ExamService {
 
     @Autowired
     private ProblemRepository problemRepository;
+
+    @Autowired
+    private SubmissionRepository submissionRepository;
 
     @Autowired
     private UserService userService;
@@ -60,6 +64,17 @@ public class ExamServiceImpl implements ExamService {
     public void deleteExam(Long id) {
         Exam exam = getExamById(id);
         checkExamOwnership(exam);
+        // 先删除该考试下的所有提交记录，避免外键约束错误
+        var submissionsPage = submissionRepository.findByExamId(id, Pageable.unpaged());
+        if (!submissionsPage.isEmpty()) {
+            submissionRepository.deleteAll(submissionsPage.getContent());
+        }
+        // 再删除考试与题目的关联关系
+        var examProblems = examProblemRepository.findByExamId(id);
+        if (!examProblems.isEmpty()) {
+            examProblemRepository.deleteAll(examProblems);
+        }
+        // 最后删除考试本身
         examRepository.delete(exam);
     }
 
@@ -70,7 +85,7 @@ public class ExamServiceImpl implements ExamService {
 
         // 教师和管理员可以查看任何考试，学生只能查看可访问的考试
         User currentUser = userService.getCurrentUser();
-        if (currentUser.getRole().name().startsWith("ROLE_STUDENT")) {
+        if (currentUser.getRole() == UserRole.STUDENT) {
             LocalDateTime now = LocalDateTime.now();
             if (now.isBefore(exam.getStartTime()) && exam.getStatus() != ExamStatus.SCHEDULED) {
                 throw new RuntimeException("考试尚未开始");
@@ -83,11 +98,11 @@ public class ExamServiceImpl implements ExamService {
     @Override
     public Page<Exam> getExamsByCreator(Pageable pageable) {
         User currentUser = userService.getCurrentUser();
-        // 管理员共享考试列表：可以看到所有考试
-        if (currentUser.getRole() == UserRole.ADMIN) {
+        // 管理员和教师共享考试列表：可以看到所有考试
+        if (currentUser.getRole() == UserRole.ADMIN || currentUser.getRole() == UserRole.TEACHER) {
             return examRepository.findAll(pageable);
         }
-        // 教师等用户：只看到自己创建的考试
+        // 其他角色（如果有）：只看到自己创建的考试
         return examRepository.findByCreatedById(currentUser.getId(), pageable);
     }
 
@@ -181,8 +196,9 @@ public class ExamServiceImpl implements ExamService {
 
     private void checkExamOwnership(Exam exam) {
         User currentUser = userService.getCurrentUser();
-        if (!exam.getCreatedBy().getId().equals(currentUser.getId()) &&
-                !currentUser.getRole().name().startsWith("ROLE_ADMIN")) {
+        // 管理员可以操作任何考试，其他用户只能操作自己创建的考试
+        if (currentUser.getRole() != UserRole.ADMIN &&
+                !exam.getCreatedBy().getId().equals(currentUser.getId())) {
             throw new RuntimeException("无权操作此考试");
         }
     }

@@ -10,14 +10,14 @@ export interface RegisterPayload {
   studentId?: string
   realName?: string
   className?: string
-  role: 'STUDENT' | 'ADMIN'
+  role: 'STUDENT' | 'TEACHER' | 'ADMIN'
 }
 
 export interface UserProfile {
   id: number
   username: string
   email: string
-  role: 'STUDENT' | 'ADMIN'
+  role: 'STUDENT' | 'TEACHER' | 'ADMIN'
   studentId?: string
   realName?: string
   className?: string

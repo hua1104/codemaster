@@ -27,10 +27,11 @@
                     v-model="queryForm.role" 
                     placeholder="筛选角色" 
                     clearable 
-                    style="width: 150px; margin-right: 15px;"
+                    style="width: 180px; margin-right: 15px;"
                     @change="handleSearch"
                 >
                     <el-option label="管理员" value="ADMIN" />
+                    <el-option label="教师" value="TEACHER" />
                     <el-option label="学生" value="STUDENT" />
                 </el-select>
                 <el-button type="primary" @click="handleSearch">查询</el-button>
@@ -44,10 +45,10 @@
                 <el-table-column type="index" label="序号" width="60" />
                 <el-table-column prop="username" label="用户名" min-width="150" />
                 <el-table-column prop="email" label="邮箱" min-width="200" />
-                <el-table-column prop="role" label="角色" width="100">
+                <el-table-column prop="role" label="角色" width="120">
                     <template #default="{ row }">
                         <el-tag :type="getTagType(row.role)">
-                            {{ row.role === 'ADMIN' ? '管理员' : '学生' }}
+                            {{ row.role === 'ADMIN' ? '管理员' : row.role === 'TEACHER' ? '教师' : '学生' }}
                         </el-tag>
                     </template>
                 </el-table-column>
@@ -90,6 +91,7 @@
                     <el-form-item label="角色">
                         <el-select v-model="createForm.role" placeholder="请选择角色" style="width: 160px;">
                             <el-option label="管理员" value="ADMIN" />
+                            <el-option label="教师" value="TEACHER" />
                             <el-option label="学生" value="STUDENT" />
                         </el-select>
                     </el-form-item>
@@ -128,7 +130,7 @@ import apiClient from '@/services/apiClient';
 import { endpoints } from '@/services/endpoints';
 
 // --- 类型定义 ---
-type UserRole = 'ADMIN' | 'STUDENT';
+type UserRole = 'ADMIN' | 'TEACHER' | 'STUDENT';
 type TagType = 'info' | 'success' | 'danger' | 'warning' | 'primary';
 
 interface User {
@@ -302,6 +304,9 @@ const handleDelete = (id: number) => {
 const getTagType = (role: UserRole): TagType => {
     if (role === 'ADMIN') {
         return 'danger';
+    }
+    if (role === 'TEACHER') {
+        return 'warning';
     }
     return 'success';
 };

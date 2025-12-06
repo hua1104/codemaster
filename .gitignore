@@ -11,13 +11,24 @@
 .DS_Store
 Thumbs.db
 
+# 通用日志 / 临时文件
+*.log
+*.tmp
+*.swp
+
+# 环境变量文件（如果将来有）
+.env
+.env.local
+
 # Node / 前端
 frontend/node_modules/
 frontend/dist/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
 
 # Java / Maven
 Code-Examner-master/target/
+Code-Examner-master/.mvn/
 

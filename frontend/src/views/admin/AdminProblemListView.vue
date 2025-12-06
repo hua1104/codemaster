@@ -106,8 +106,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Refresh } from '@element-plus/icons-vue'
 import apiClient from '@/services/apiClient'
@@ -124,6 +124,9 @@ interface Problem {
 }
 
 const router = useRouter()
+const route = useRoute()
+
+const isTeacherContext = computed(() => route.path.startsWith('/teacher'))
 
 const problemList = ref<Problem[]>([])
 const loading = ref(false)
@@ -175,11 +178,16 @@ const handleCurrentChange = (val: number) => {
 }
 
 const handleCreate = () => {
-  router.push({ name: 'AdminProblemCreate' })
+  router.push({
+    name: isTeacherContext.value ? 'TeacherProblemCreate' : 'AdminProblemCreate'
+  })
 }
 
 const handleEdit = (id: number) => {
-  router.push({ name: 'AdminProblemEdit', params: { id: id.toString() } })
+  router.push({
+    name: isTeacherContext.value ? 'TeacherProblemEdit' : 'AdminProblemEdit',
+    params: { id: id.toString() }
+  })
 }
 
 const handleView = (id: number) => {

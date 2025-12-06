@@ -5,6 +5,9 @@ import com.CodeExamner.dto.request.UserProfileUpdateRequest;
 import com.CodeExamner.entity.Student;
 import com.CodeExamner.entity.User;
 import com.CodeExamner.entity.enums.UserRole;
+import com.CodeExamner.repository.ExamRepository;
+import com.CodeExamner.repository.ProblemRepository;
+import com.CodeExamner.repository.SubmissionRepository;
 import com.CodeExamner.repository.UserRepository;
 import com.CodeExamner.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +30,15 @@ public class UserServiceImpl implements UserService {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private SubmissionRepository submissionRepository;
+
+    @Autowired
+    private ExamRepository examRepository;
+
+    @Autowired
+    private ProblemRepository problemRepository;
 
     // 原有方法保持不变...
     @Override
@@ -137,6 +149,21 @@ public class UserServiceImpl implements UserService {
         User currentUser = getCurrentUser();
         if (user.getId().equals(currentUser.getId())) {
             throw new RuntimeException("不能删除自己的账户");
+        }
+
+        // 学生：先删除其提交记录，避免外键约束错误
+        if (user instanceof Student) {
+            submissionRepository.findByStudentId(user.getId(), org.springframework.data.domain.Pageable.unpaged())
+                    .forEach(submissionRepository::delete);
+        } else {
+            // 教师 / 管理员：如果存在其创建的考试或题目，暂不允许直接删除
+            boolean hasExams = !examRepository.findByCreatedById(user.getId()).isEmpty();
+            boolean hasProblems = !problemRepository
+                    .findByCreatedById(user.getId(), org.springframework.data.domain.Pageable.unpaged())
+                    .isEmpty();
+            if (hasExams || hasProblems) {
+                throw new RuntimeException("该用户创建了考试或题目，请先处理相关数据后再删除该用户");
+            }
         }
 
         userRepository.delete(user);

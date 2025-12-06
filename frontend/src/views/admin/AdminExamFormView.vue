@@ -305,7 +305,8 @@ const formatDifficulty = (difficulty: Difficulty) => {
 const loadAvailableProblems = async () => {
   problemsLoading.value = true
   try {
-    const { data } = await apiClient.get(endpoints.problems.listMy, {
+    // 使用可访问题目列表：管理员看到全部题目，教师看到公开题目 + 自己创建的题目
+    const { data } = await apiClient.get(endpoints.problems.listAll, {
       params: { page: 0, size: 100 }
     })
     const items = (data.content ?? []) as any[]
@@ -413,7 +414,9 @@ const handleSubmit = async () => {
         ElMessage.success('新考试创建成功！')
       }
 
-      router.push({ name: 'AdminExamList' })
+      router.push({
+        name: route.path.startsWith('/teacher') ? 'TeacherExamList' : 'AdminExamList'
+      })
     } catch (error) {
       ElMessage.error(isEditMode.value ? '保存失败，请稍后重试' : '创建失败，请稍后重试')
     } finally {
@@ -470,4 +473,3 @@ onMounted(() => {
   max-width: 900px;
 }
 </style>
-

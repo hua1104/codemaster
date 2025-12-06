@@ -99,10 +99,13 @@ const handleLogin = async () => {
         // 调用实际后端登录接口，保存 token
         await authStore.login(loginForm);
 
-        // 根据角色跳转到不同仪表盘（ADMIN -> 管理员，其它 -> 学生）
+        // 根据角色跳转到不同仪表盘
         if (authStore.role === 'ADMIN') {
           ElMessage.success('管理员登录成功！');
           router.push('/admin/dashboard');
+        } else if (authStore.role === 'TEACHER') {
+          ElMessage.success('教师登录成功！');
+          router.push('/teacher/dashboard');
         } else {
           ElMessage.success('登录成功！');
           router.push('/dashboard');

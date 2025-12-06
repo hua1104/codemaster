@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import authRoutes from './modules/auth'
 import adminRoutes from './modules/admin'
 import studentRoutes from './modules/student'
+import teacherRoutes from './modules/teacher'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -12,6 +13,7 @@ const router = createRouter({
     },
     ...authRoutes,
     ...adminRoutes,
+    ...teacherRoutes,
     ...studentRoutes,
     {
       path: '/:pathMatch(.*)*',

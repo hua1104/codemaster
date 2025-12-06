@@ -14,7 +14,8 @@ import java.util.Map;
 @Component
 public class Judge0Client {
 
-    @Value("${judge0.base-url:http://localhost:2358}")
+    // 从 application.yml 的 app.judge0.base-url 读取，默认为本机 2358 端口
+    @Value("${app.judge0.base-url:http://localhost:2358}")
     private String baseUrl;
 
     private final RestTemplate restTemplate;
