@@ -32,3 +32,5 @@ pnpm-debug.log*
 Code-Examner-master/target/
 Code-Examner-master/.mvn/
 
+# 其他外部仓库 / 部署脚本（本项目不需要上传）
+qduoj-deploy/

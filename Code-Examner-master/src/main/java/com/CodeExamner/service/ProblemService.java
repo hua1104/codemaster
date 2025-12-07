@@ -20,5 +20,6 @@ public interface ProblemService {
     Problem addTestCase(Long problemId, TestCase testCase);
     List<TestCase> getTestCases(Long problemId);
     List<TestCase> getSampleTestCases(Long problemId);
+    void replaceTestCases(Long problemId, java.util.List<TestCase> testCases);
     Page<Problem> searchProblems(String keyword, Difficulty difficulty, Pageable pageable);
 }

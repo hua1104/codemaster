@@ -126,6 +126,22 @@ public class ProblemServiceImpl implements ProblemService {
     }
 
     @Override
+    public void replaceTestCases(Long problemId, List<TestCase> testCases) {
+        Problem problem = getProblemById(problemId);
+        checkProblemOwnership(problem);
+
+        // 先删掉该题目下的所有旧测试用例
+        testCaseRepository.deleteByProblemId(problemId);
+
+        // 再逐个保存新的测试用例
+        for (TestCase testCase : testCases) {
+            testCase.setId(null); // 防止带入旧 ID
+            testCase.setProblem(problem);
+            testCaseRepository.save(testCase);
+        }
+    }
+
+    @Override
     public Page<Problem> searchProblems(String keyword, Difficulty difficulty, Pageable pageable) {
         User currentUser = userService.getCurrentUser();
         final boolean isAdmin = currentUser.getRole() == UserRole.ADMIN;

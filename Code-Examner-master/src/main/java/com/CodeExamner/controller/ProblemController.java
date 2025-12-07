@@ -140,6 +140,15 @@ public class ProblemController {
         return ResponseEntity.ok(testCases);
     }
 
+    @PutMapping("/{id}/test-cases")
+    @PreAuthorize("hasRole('TEACHER') or hasRole('ADMIN')")
+    public ResponseEntity<?> replaceTestCases(
+            @PathVariable Long id,
+            @RequestBody List<TestCase> testCases) {
+        problemService.replaceTestCases(id, testCases);
+        return ResponseEntity.ok().build();
+    }
+
     private ProblemResponse convertToResponse(Problem problem) {
         ProblemResponse response = new ProblemResponse();
         response.setId(problem.getId());

@@ -4,6 +4,7 @@ package com.CodeExamner.service.impl;
 import com.CodeExamner.entity.*;
 import com.CodeExamner.entity.enums.ExamStatus;
 import com.CodeExamner.entity.enums.JudgeStatus;
+import com.CodeExamner.entity.enums.ProblemType;
 import com.CodeExamner.repository.SubmissionRepository;
 import com.CodeExamner.repository.ProblemRepository;
 import com.CodeExamner.repository.ExamRepository;
@@ -48,18 +49,14 @@ public class SubmissionServiceImpl implements SubmissionService {
         submission.setProblem(problem);
         submission.setStatus(JudgeStatus.PENDING);
 
-        // 如果是考试提交，验证考试状态
+        // 如果是考试提交，验证考试状态（只禁止考试结束后的提交）
         if (submission.getExam() != null && submission.getExam().getId() != null) {
             Exam exam = examRepository.findById(submission.getExam().getId())
                     .orElseThrow(() -> new RuntimeException("考试不存在"));
 
-            if (exam.getStatus() != ExamStatus.ONGOING) {
-                throw new RuntimeException("考试未在进行中");
-            }
-
-            // 检查考试时间 - 修复这里的逻辑
-            if (!isWithinExamTime(exam)) {
-                throw new RuntimeException("不在考试时间内");
+            // 只要考试还没结束，就允许学生暂存 / 提交答案
+            if (exam.getStatus() == ExamStatus.FINISHED || !isWithinExamTime(exam)) {
+                throw new RuntimeException("不在考试时间内，无法提交答案");
             }
 
             submission.setExam(exam);
@@ -67,8 +64,13 @@ public class SubmissionServiceImpl implements SubmissionService {
 
         Submission saved = submissionRepository.save(submission);
 
-        // 异步评测并计算得分（包括考试中的作答）
-        judgeService.judgeSubmission(saved);
+        // 编程题：走 Judge0 评测
+        if (problem.getType() == ProblemType.CODING) {
+            judgeService.judgeSubmission(saved);
+        } else {
+            // 选择题 / 填空题：本地比对标准答案，不依赖 Judge0
+            gradeNonCodingSubmission(saved, problem);
+        }
 
         return saved;
     }
@@ -156,6 +158,107 @@ public class SubmissionServiceImpl implements SubmissionService {
         newSubmission.setStatus(JudgeStatus.PENDING);
 
         return submissionRepository.save(newSubmission);
+    }
+
+    /**
+     * 对选择题 / 填空题进行本地判分，不依赖 Judge0。
+     * - CHOICE：学生提交的 code 字段是所选选项的标记（如 "A"），与 Problem.answer 中的正确选项比对；
+     * - FILL_BLANK：Problem.answer 中保存的是 JSON 数组，学生提交的 code 按行拆分，与每个空位逐一比对。
+     */
+    private void gradeNonCodingSubmission(Submission submission, Problem problem) {
+        String studentCode = submission.getCode() != null ? submission.getCode().trim() : "";
+        int fullScore = 100;
+
+        // 如果是考试中的提交，拿该题在考试中的满分
+        if (submission.getExam() != null && submission.getExam().getId() != null) {
+            Exam exam = submission.getExam();
+            examRepository.findById(exam.getId()).ifPresent(e -> {
+                // 此处只负责确保 Exam 已经是持久化对象，分数由 JudgeService 汇总时再读取 ExamProblem.score
+            });
+        }
+
+        boolean isCorrect = false;
+        boolean canJudge = false;
+
+        if (problem.getType() == ProblemType.CHOICE) {
+            // Problem.answer 存的是正确选项的 label 数组，例如 ["A","C"]
+            try {
+                if (problem.getAnswer() != null && !problem.getAnswer().trim().isEmpty()) {
+                    java.util.List<String> correctLabels = new java.util.ArrayList<>();
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    String[] arr = mapper.readValue(problem.getAnswer(), String[].class);
+                    for (String s : arr) {
+                        if (s != null && !s.trim().isEmpty()) {
+                            correctLabels.add(s.trim());
+                        }
+                    }
+                    if (!correctLabels.isEmpty()) {
+                        canJudge = true;
+                        // 当前前端为单选：学生 code 里只会有一个 label
+                        isCorrect = !studentCode.isEmpty() && correctLabels.contains(studentCode);
+                    }
+                }
+            } catch (Exception e) {
+                // 标准答案配置异常：视为暂不能判分
+                canJudge = false;
+            }
+        } else if (problem.getType() == ProblemType.FILL_BLANK) {
+            // Problem.answer 中保存的是每个空的参考答案数组
+            try {
+                if (problem.getAnswer() != null && !problem.getAnswer().trim().isEmpty()) {
+                    java.util.List<String> expected = new java.util.ArrayList<>();
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    String[] arr = mapper.readValue(problem.getAnswer(), String[].class);
+                    for (String s : arr) {
+                        expected.add(s != null ? s.trim() : "");
+                    }
+
+                    if (!expected.isEmpty()) {
+                        // 学生答案按行拆分，对应多个空
+                        String[] lines = studentCode.split("\\r?\\n");
+                        java.util.List<String> actual = new java.util.ArrayList<>();
+                        for (String line : lines) {
+                            String trimmed = line.trim();
+                            if (!trimmed.isEmpty()) {
+                                actual.add(trimmed);
+                            }
+                        }
+
+                        canJudge = (expected.size() == actual.size());
+                        if (canJudge) {
+                            isCorrect = true;
+                            for (int i = 0; i < expected.size(); i++) {
+                                if (!expected.get(i).equals(actual.get(i))) {
+                                    isCorrect = false;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                // 标准答案配置异常：视为暂不能判分
+                canJudge = false;
+            }
+        }
+
+        submission.setTimeUsed(0);
+        submission.setMemoryUsed(0);
+
+        if (!canJudge) {
+            // 没有配置有效标准答案或配置错误：保持待评测状态，不给学生错误提示
+            submission.setStatus(JudgeStatus.PENDING);
+            submission.setScore(null);
+        } else if (isCorrect) {
+            submission.setStatus(JudgeStatus.ACCEPTED);
+            // 暂时统一记为满分（如果后续需要按考试设置分值，可在这里读取 ExamProblem.score）
+            submission.setScore(fullScore);
+        } else {
+            submission.setStatus(JudgeStatus.WRONG_ANSWER);
+            submission.setScore(0);
+        }
+
+        submissionRepository.save(submission);
     }
 
     // 修复这个方法 - 添加参数检查

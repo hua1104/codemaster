@@ -13,6 +13,17 @@
           <el-icon :size="20"><Timer /></el-icon>
           <span style="font-weight: bold; font-size: 1.2em; margin-left: 5px;">{{ formattedTimeLeft }}</span>
         </div>
+        <el-select
+          v-model="currentLanguage"
+          size="small"
+          style="width: 130px; margin-left: 16px;"
+          :disabled="!isTaking"
+        >
+          <el-option label="Java" value="java" />
+          <el-option label="C" value="c" />
+          <el-option label="C++" value="cpp" />
+          <el-option label="Python 3" value="python3" />
+        </el-select>
         
         <el-button 
           type="primary" 
@@ -175,6 +186,9 @@ const exam = ref({
 const currentProblemIndex = ref(0)
 const isTaking = computed(() => exam.value.isTaking)
 
+// 学生可选的评测语言，默认为 Java
+const currentLanguage = ref<'java' | 'c' | 'cpp' | 'python3'>('java')
+
 let timerId: number | null = null
 
 const startCountdown = () => {
@@ -322,7 +336,7 @@ const saveDraft = async () => {
       problemId: currentProblem.id,
       examId: exam.value.id,
       code: currentProblem.answer,
-      language: 'java'
+      language: currentLanguage.value
     })
 
     ElMessage.success('当前答案已暂存，并已保存到服务器，稍后会自动评测并算分')
@@ -367,7 +381,7 @@ const submitExam = async () => {
           problemId: p.id,
           examId: exam.value.id,
           code: p.answer,
-          language: 'java'
+          language: currentLanguage.value
         })
       )
     )

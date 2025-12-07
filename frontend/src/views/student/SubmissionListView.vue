@@ -294,12 +294,11 @@ const formatResult = (status: string) => {
     ACCEPTED: '通过 (AC)',
     WRONG_ANSWER: '错误 (WA)',
     PENDING: '待评测',
-    RUNNING: '评测中',
-    COMPILE_ERROR: '编译失败',
+    JUDGING: '评测中',
+    COMPILATION_ERROR: '编译失败',
     RUNTIME_ERROR: '运行时错误',
-    TIMEOUT: '超时',
-    SYSTEM_ERROR: '系统错误',
-    CANCELLED: '已取消'
+    TIME_LIMIT_EXCEEDED: '超时',
+    MEMORY_LIMIT_EXCEEDED: '内存超限'
   }
   return map[status] || status || '未知'
 }
@@ -309,12 +308,11 @@ const getResultType = (status: string) => {
     ACCEPTED: 'success',
     WRONG_ANSWER: 'danger',
     PENDING: 'warning',
-    RUNNING: 'warning',
-    COMPILE_ERROR: 'info',
+    JUDGING: 'warning',
+    COMPILATION_ERROR: 'info',
     RUNTIME_ERROR: 'info',
-    TIMEOUT: 'info',
-    SYSTEM_ERROR: 'info',
-    CANCELLED: 'info'
+    TIME_LIMIT_EXCEEDED: 'info',
+    MEMORY_LIMIT_EXCEEDED: 'info'
   }
   return map[status] || 'info'
 }

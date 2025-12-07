@@ -10,4 +10,6 @@ import java.util.List;
 public interface TestCaseRepository extends JpaRepository<TestCase, Long> {
     List<TestCase> findByProblemId(Long problemId);
     List<TestCase> findByProblemIdAndIsSample(Long problemId, Boolean isSample);
+
+    void deleteByProblemId(Long problemId);
 }

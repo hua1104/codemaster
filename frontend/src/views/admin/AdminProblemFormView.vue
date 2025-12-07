@@ -86,7 +86,78 @@
               />
             </el-form-item>
 
-            <template v-if="form.type === 'CHOICE'">
+            <template v-if="form.type === 'CODING'">
+              <el-divider content-position="left">代码模板（可选）</el-divider>
+              <el-form-item label-width="0">
+                <el-input
+                  v-model="form.templateCode"
+                  type="textarea"
+                  :rows="8"
+                  placeholder="在这里给出函数签名、示例代码框架等，学生会在此基础上作答"
+                />
+              </el-form-item>
+
+              <el-divider content-position="left">测试用例（与 Judge0 匹配）</el-divider>
+              <div class="testcase-toolbar">
+                <span style="font-size: 13px; color: var(--el-text-color-secondary);">
+                  请为编程题配置若干输入输出用例，系统会将学生代码提交到 Judge0，并按这些用例进行测评。
+                </span>
+                <el-button
+                  type="primary"
+                  link
+                  @click="addTestCase"
+                  style="margin-left: 12px;"
+                >
+                  新增测试用例
+                </el-button>
+              </div>
+
+              <el-table
+                :data="testCases"
+                border
+                style="width: 100%; margin-top: 10px;"
+                size="small"
+              >
+                <el-table-column label="是否为示例" width="110">
+                  <template #default="{ row }">
+                    <el-checkbox v-model="row.isSample">示例</el-checkbox>
+                  </template>
+                </el-table-column>
+                <el-table-column label="输入（stdin）">
+                  <template #default="{ row }">
+                    <el-input
+                      v-model="row.input"
+                      type="textarea"
+                      :rows="3"
+                      placeholder="传给程序的标准输入"
+                    />
+                  </template>
+                </el-table-column>
+                <el-table-column label="期望输出（expected_output）">
+                  <template #default="{ row }">
+                    <el-input
+                      v-model="row.expectedOutput"
+                      type="textarea"
+                      :rows="3"
+                      placeholder="程序期望输出（必须与 Judge0 的输出严格匹配）"
+                    />
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作" width="80">
+                  <template #default="{ $index }">
+                    <el-button
+                      type="danger"
+                      link
+                      @click="removeTestCase($index)"
+                    >
+                      删除
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </template>
+
+            <template v-else-if="form.type === 'CHOICE'">
               <el-divider content-position="left">选择题选项</el-divider>
               <div v-for="(opt, index) in choiceOptions" :key="opt.label" style="display: flex; align-items: center; margin-bottom: 8px;">
                 <el-checkbox v-model="opt.correct" style="margin-right: 8px;">正确</el-checkbox>
@@ -152,6 +223,7 @@ type ProblemType = 'CODING' | 'CHOICE' | 'FILL_BLANK'
 interface ProblemForm {
   title: string
   description: string
+  templateCode: string
   type: ProblemType
   difficulty: Difficulty
   timeLimit: number
@@ -169,6 +241,7 @@ const isEditMode = ref(!!props.id)
 const form = reactive<ProblemForm>({
   title: '',
   description: '',
+  templateCode: '',
   type: 'CODING',
   difficulty: 'MEDIUM',
   timeLimit: 1000,
@@ -187,6 +260,15 @@ const choiceOptions = reactive(
 
 const fillAnswers = reactive<string[]>([''])
 
+interface TestCaseForm {
+  id?: number
+  input: string
+  expectedOutput: string
+  isSample: boolean
+}
+
+const testCases = reactive<TestCaseForm[]>([])
+
 const rules = reactive<FormRules>({
   title: [{ required: true, message: '请输入题目名称', trigger: 'blur' }],
   type: [{ required: true, message: '请选择题目类型', trigger: 'change' }],
@@ -202,7 +284,8 @@ const fetchProblemDetail = async (id: string) => {
     const { data } = await apiClient.get(endpoints.problems.detail(id))
     form.title = data.title
     form.description = data.description
-     form.type = data.type || 'CODING'
+    form.templateCode = data.templateCode || ''
+    form.type = data.type || 'CODING'
     form.difficulty = data.difficulty
     form.timeLimit = data.timeLimit
     form.memoryLimit = data.memoryLimit
@@ -229,6 +312,21 @@ const fetchProblemDetail = async (id: string) => {
       } catch {
         // 如果不是 JSON，就当作单个答案
         fillAnswers.splice(0, fillAnswers.length, data.answer)
+      }
+    }
+
+    // 加载已有测试用例（仅对编程题有效）
+    if (form.type === 'CODING') {
+      try {
+        const { data: tcs } = await apiClient.get(`/problems/${id}/test-cases`)
+        testCases.splice(0, testCases.length, ...tcs.map((tc: any) => ({
+          id: tc.id,
+          input: tc.input || '',
+          expectedOutput: tc.expectedOutput || '',
+          isSample: !!tc.isSample
+        })))
+      } catch {
+        // ignore
       }
     }
   } catch (error) {
@@ -269,7 +367,7 @@ const handleSubmit = async () => {
       const payload = {
         title: form.title,
         description: form.description,
-        templateCode: '',
+        templateCode: form.type === 'CODING' ? form.templateCode : '',
         type: form.type,
         options,
         answer,
@@ -279,12 +377,30 @@ const handleSubmit = async () => {
         isPublic: form.isPublic
       }
 
+      let currentId = problemId.value
+
       if (isEditMode.value && problemId.value) {
         await apiClient.put(endpoints.problems.update(problemId.value), payload)
         ElMessage.success('题目修改成功')
       } else {
-        await apiClient.post(endpoints.problems.create, payload)
+        const { data } = await apiClient.post(endpoints.problems.create, payload)
+        currentId = String(data.id)
+        problemId.value = currentId
         ElMessage.success('新题目创建成功')
+      }
+
+      // 如果是编程题，同步测试用例到后端（与 Judge0 匹配）
+      if (form.type === 'CODING' && currentId) {
+        const filtered = testCases
+          .map((tc) => ({
+            id: tc.id,
+            input: tc.input?.trim() || '',
+            expectedOutput: tc.expectedOutput?.trim() || '',
+            isSample: tc.isSample
+          }))
+          .filter((tc) => tc.input || tc.expectedOutput)
+
+        await apiClient.put(`/problems/${currentId}/test-cases`, filtered)
       }
 
       router.push({ name: 'AdminProblemList' })
@@ -302,10 +418,26 @@ const resetForm = () => {
   }
   form.title = ''
   form.description = ''
+  form.templateCode = ''
   form.difficulty = 'MEDIUM'
   form.timeLimit = 1000
   form.memoryLimit = 256
   form.isPublic = true
+  testCases.splice(0, testCases.length)
+}
+
+const addTestCase = () => {
+  testCases.push({
+    input: '',
+    expectedOutput: '',
+    isSample: testCases.length === 0 // 默认第一条勾选为示例
+  })
+}
+
+const removeTestCase = (index: number) => {
+  if (index >= 0 && index < testCases.length) {
+    testCases.splice(index, 1)
+  }
 }
 
 onMounted(() => {
